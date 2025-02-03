@@ -1,21 +1,24 @@
 generator client {
   provider = "prisma-client-js"
+  schema = "app_data"
 }
 
 
 datasource db {
   provider = "postgresql"
-  url      = ""
+  url      = env("DATABASE_URL") // Load from .env
 }
+
 
 model User {
   id         String    @id @default(uuid())
   name       String
   email      String    @unique
+  phoneNumber      String    @unique
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-  contents   Content[]
   tripUsers  TripUser[]
+  contents   Content[] // Added this to relate to Content model
 }
 
 model Trip {
@@ -27,7 +30,7 @@ model Trip {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   tripUsers  TripUser[]
-  contents   Content[]
+  contents   Content[] // Added this to relate to Content model
 }
 
 model TripUser {
@@ -43,31 +46,35 @@ model TripUser {
   @@unique([tripId, userId]) // Prevent duplicate user-trip associations
 }
 
-model Content {
-  id         String    @id @default(uuid())
-  url        String    @unique
-  metadata   Json
-  userId     String
-  tripId     String
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
 
-  user       User      @relation(fields: [userId], references: [id])
-  trip       Trip      @relation(fields: [tripId], references: [id])
-  pins       Pin[]
+
+model Content {
+  id             String    @id @default(uuid())
+  url            String
+  rawData        String
+  structuredData String
+  userId         String
+  tripId         String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user           User      @relation(fields: [userId], references: [id]) // Content belongs to one User
+  trip           Trip      @relation(fields: [tripId], references: [id]) // Content belongs to one Trip
+  pins           Pin[]     // List of Pins for this Content
 }
 
 model Pin {
-  id         String    @id @default(uuid())
-  name       String
-  location   Json
-  category   String
-  description String?
-  contentId  String
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  name          String
+  category      String
+  description   String?
+  contentId     String
+  placeCacheId  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  content    Content   @relation(fields: [contentId], references: [id])
+  content       Content   @relation(fields: [contentId], references: [id]) // Pin belongs to one Content
+  placeCache    PlaceCache? @relation(fields: [placeCacheId], references: [id]) // Pin belongs to optional PlaceCache
 }
 
 model PlaceCache {
@@ -77,4 +84,6 @@ model PlaceCache {
   lng         Float
   createdAt   DateTime  @default(now())
   lastCached  DateTime
+  pins        Pin[]     // PlaceCache can have many Pins
 }
+

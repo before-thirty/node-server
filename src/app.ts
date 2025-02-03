@@ -10,20 +10,13 @@ import { logger, requestLogger } from "./middleware/logger"
 import {extractLocationAndClassify} from "./helpers/openai"
 import parser from "html-metadata-parser";
 import { getPlaceId,getCoordinatesFromPlaceId } from './helpers/googlemaps';
+import { z } from 'zod';
+import { getTripsByUserId,createContent, updateContent, getPlaceCacheById, createPin,createPlaceCache } from './helpers/dbHelpers'; // Import helper functions
+
+
 
 // Load environment variables from .env file
 dotenv.config();
-
-// MongoDB Atlas connection
-const connectDB = async (): Promise<void> => {
-    try {
-        await mongoose.connect("mongodb+srv://beforethirty911:xAyoioz0DboGbfAo@beforethirty.5kpzb.mongodb.net/?retryWrites=true&w=majority&appName=BeforeThirty");
-        console.log('MongoDB connected');
-    } catch (error) {
-        console.error('MongoDB connection error:', error);
-        process.exit(1);
-    }
-};
 
 // Initialize the Express app
 const app = express();
@@ -39,7 +32,6 @@ app.use(morgan('dev')); // HTTP request logger for development
 // app.use('/api', routes);
 
 // Connect to MongoDB Atlas
-connectDB();
 
 const getMetadata = async (url: string) => {
     try {
@@ -51,42 +43,89 @@ const getMetadata = async (url: string) => {
     }
   };
 
+// Define the Zod schema for validation
+const ContentSchema = z.object({
+      url: z.string().url(), // URL must be a valid URL
+      content: z.string(), // Content should be a string
+      user_id: z.string().uuid(), // user_id should be a UUID string
+      trip_id: z.string().uuid(), // trip_id should be a UUID string
+  });
 // Define primary route
 app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<void> => {
-    // req.logger?(req.requestId)
-    // req.log
-    req.logger?.info(req.requestId)
     try {
-        const url = req.query.url as string;
-        if (!url) {
-        res.status(400).json({ error: "URL is required" });
-        }
-        const metadata = await getMetadata(url);
+        // Validate the request body using Zod
+        const validatedData = ContentSchema.parse(req.body); // This will throw an error if validation fails
 
-        const description = metadata?.meta.description;
+        const { url, content, user_id, trip_id } = validatedData;
+
+        req.logger?.info(`Request received: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`);
+
+        let description = content ?? "";
+
+        // If content is empty, fetch metadata from the URL
+        if (!content || content.trim() === "") {
+            const metadata = await getMetadata(url);
+            description = metadata?.meta.description ?? "";
+        }
 
         if (!description) {
-        res
-            .status(404)
-            .json({ error: "Could not fetch metadata for the given URL" });
+            res.status(404).json({ error: "Could not fetch metadata for the given URL" });
+            return;
         }
-        
+
+        // create db entry for content
+        const newContent = await createContent(url, description, user_id, trip_id);
+
+
+        // Extract structured data using AI
         const analysis = await extractLocationAndClassify(description ?? "");
 
-        const full_loc = analysis.name ?? "" + analysis.location
-        const placeId = await getPlaceId(full_loc);
+        // Update the Content entry with structured data
+        await updateContent(newContent.id, analysis);
 
-        const coordinates = await getCoordinatesFromPlaceId(placeId);
+        // Process each analysis object in the list
+        const responses = await Promise.all(
+            analysis.map(async (analysis) => {
+                const full_loc = (analysis.name ?? "") + " " + (analysis.location ?? "");
+                const placeId = await getPlaceId(full_loc);
 
-        const response = { ...analysis, coordinates };
+                let coordinates;
+                let placeCacheId;
 
-        res.status(200).json({ response });
+                const placeCache = await getPlaceCacheById(placeId);
+
+
+                if (placeCache){
+                    coordinates = { lat: placeCache.lat, lng: placeCache.lng };
+                    placeCacheId = placeCache.id;
+                }else {
+                    coordinates = await getCoordinatesFromPlaceId(placeId);
+                    // Create new place cache
+                    const newPlaceCache = await createPlaceCache(placeId, coordinates);
+                    placeCacheId = newPlaceCache.id;
+                }
+
+
+                await createPin(analysis.name??"", analysis.classification??"", newContent.id, placeCacheId);
+                // Fetch coordinates from PlaceId (assuming getCoordinatesFromPlaceId is a utility function)
+                
+                return { ...analysis, coordinates };
+            })
+        );
+
+        // Respond with the processed data
+        res.status(200).json(responses);
+
     } catch (error) {
-        console.error(`Error processing request:`, error);
-        res.status(500).json({ error: 'Internal server error.' });
+        // Handle Zod validation error
+        if (error instanceof z.ZodError) {
+            res.status(400).json({ error: 'Invalid input data', details: error.errors });
+        } else {
+            console.error(`Error processing request:`, error);
+            res.status(500).json({ error: 'Internal server error.' });
+        }
     }
 });
-
 // Define internal route stubs
 // Route to extract place details from ChatGPT API
 const fetchPlaceDetails = async (caption: string): Promise<{ placeName: string; city: string; country: string }> => {
@@ -101,6 +140,49 @@ const fetchLatLong = async (placeData: { placeName: string; city: string; countr
     // Placeholder: Call Google Maps Geocoding API
     return { lat: 12.9716, long: 77.5946 }; // Example lat-long for Bangalore, India
 };
+
+
+
+
+// Define Zod schema for the request validation
+const userTripsSchema = z.object({
+    user_id: z.string().min(1, 'user_id is required'), // user_id must be a non-empty string
+});
+app.get('/api/user-trips', async (req: Request, res: Response): Promise<void> => {
+    try {
+        // Validate the incoming query using Zod schema
+        const { user_id } = userTripsSchema.parse(req.query);
+
+        // Call the helper function to get the trips by user ID
+        const trips = await getTripsByUserId(user_id);
+
+        if (trips.length === 0) {
+            res.status(404).json({ error: 'No trips found for the given user.' });
+            return;
+        }
+
+        // Send the trips as a list of dictionaries
+        res.status(200).json(trips);
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            // Handle Zod validation errors
+            res.status(400).json({ error: error.errors });
+        } else {
+            console.error(`Error fetching trips:`, error);
+            res.status(500).json({ error: 'Internal server error.' });
+        }
+    }
+});
+
+app.get("/api/health", async (req: Request, res: Response) => {
+    res.status(200).json({
+        status: "ok",
+        timestamp: new Date().toISOString(),
+    });
+});
+
+
+
 
 // Start the server
 const PORT = process.env.PORT || 5000;

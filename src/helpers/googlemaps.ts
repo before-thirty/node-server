@@ -1,6 +1,9 @@
 import axios from "axios";
+import dotenv from "dotenv";
 
-const GOOGLE_MAPS_API_KEY = ""
+dotenv.config();
+
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY
 
 
 export async function getPlaceId(query: string): Promise<string> {
@@ -25,7 +28,6 @@ export async function getPlaceId(query: string): Promise<string> {
     if (!places) {
       throw new Error(`No places found by google places api ${query}`);
     }
-
     return places[0].id;
   } catch (error) {
     console.error("Error calling Places API:", error);
