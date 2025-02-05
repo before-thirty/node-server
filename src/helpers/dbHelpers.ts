@@ -87,4 +87,36 @@ export const getTripsByUserId = async (userId: string) => {
     }
 };
 
+export const getAllUsers = async () => {
+    try {
+        // Fetch all users from the User model without selecting specific fields
+        const users = await prisma.user.findMany();
 
+        return users;
+    } catch (error) {
+        console.error('Error fetching users:', error);
+        throw new Error('Error fetching users');
+    }
+};
+
+
+export const createTrip = async (name: string, startDate: Date, endDate: Date, description: string) => {
+    return await prisma.trip.create({
+        data: {
+            name : name ?? "Untitled",
+            startDate: startDate ?? "NA",
+            endDate: endDate ?? "NA",
+            description: description
+        }
+    });
+}
+
+export const createUserTrip = async (role: string, userId: string, tripId: string) => {
+    return await prisma.tripUser.create({
+        data: {
+            role: role ?? "",
+            userId: userId,
+            tripId: tripId
+        }
+    });
+}

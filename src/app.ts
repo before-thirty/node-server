@@ -11,7 +11,7 @@ import {extractLocationAndClassify} from "./helpers/openai"
 import parser from "html-metadata-parser";
 import { getPlaceId,getCoordinatesFromPlaceId } from './helpers/googlemaps';
 import { z } from 'zod';
-import { getTripsByUserId,createContent, updateContent, getPlaceCacheById, createPin,createPlaceCache } from './helpers/dbHelpers'; // Import helper functions
+import { getTripsByUserId,createContent, createTrip, createUserTrip, getAllUsers, updateContent, getPlaceCacheById, createPin,createPlaceCache } from './helpers/dbHelpers'; // Import helper functions
 
 
 
@@ -43,6 +43,17 @@ const getMetadata = async (url: string) => {
     }
   };
 
+const TripSchema = z.object({
+    id: z.string().uuid().optional(), // UUID
+    name: z.string().min(1, "Trip name is required"),
+    startDate:  z.coerce.date().refine((data) => data > new Date(), {message: 'Start date must be in the future'}),
+    endDate: z.coerce.date().refine((data) => data > new Date(), {message: 'Start date must be in the future'}),
+    description: z.string().optional()
+  }).refine((data) => data.endDate > data.startDate, {
+    message: "End date cannot be earlier than start date.",
+    path: ["endDate"],
+  });
+  
 // Define the Zod schema for validation
 const ContentSchema = z.object({
       url: z.string().url(), // URL must be a valid URL
@@ -50,6 +61,12 @@ const ContentSchema = z.object({
       user_id: z.string().uuid(), // user_id should be a UUID string
       trip_id: z.string().uuid(), // trip_id should be a UUID string
   });
+
+const UserTripSchema = z.object({
+    role: z.string(),
+    user_id: z.string().uuid(),
+    trip_id: z.string().uuid()
+    }); 
 // Define primary route
 app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -182,6 +199,62 @@ app.get("/api/health", async (req: Request, res: Response) => {
 });
 
 
+app.get('/api/users', async (req: Request, res: Response): Promise<void> => {
+    try {
+        // Call the function to fetch all users
+        const users = await getAllUsers();
+        
+        // Return the list of users
+        res.status(200).json(users);
+    } catch (error) {
+        // Handle errors
+        console.error('Error fetching users:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+
+app.post('/api/create-trip', async (req: Request, res: Response): Promise<void> => {
+    try {
+        // Validate the incoming request data using Zod schema
+        const {name, startDate, endDate, description} = TripSchema.parse(req.body);
+
+        // Call the function to create a new trip
+        const newTrip = await createTrip(name, startDate, endDate, description ?? "");
+
+        // Send the new trip as a dictionary
+        res.status(201).json(newTrip);
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            // Handle Zod validation errors
+            res.status(400).json({ error: error.errors });
+        } else {
+            console.error(`Error creating trip:`, error);
+            res.status(500).json({ error: 'Internal server error.' });
+        }
+    }
+})
+
+app.post('/api/create-user-trip', async (req: Request, res: Response): Promise<void> => {
+    try {
+        // Validate the incoming request data using Zod schema
+        const {role, user_id, trip_id} = UserTripSchema.parse(req.body);
+
+        // Call the function to create a new user-trip association
+        await createUserTrip(role, user_id, trip_id);
+
+        // Send a success message
+        res.status(201).json({ message: 'User-trip association created successfully.' });
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            // Handle Zod validation errors
+            res.status(400).json({ error: error.errors });
+        } else {
+            console.error(`Error creating user-trip association:`, error);
+            res.status(500).json({ error: 'Internal server error.' });
+        }
+    }
+})
 
 
 // Start the server
