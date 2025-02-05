@@ -199,34 +199,15 @@ app.get("/api/health", async (req: Request, res: Response) => {
 });
 
 
-app.get('/api/users', async (req: Request, res: Response): Promise<void> => {
-    try {
-        // Call the function to fetch all users
-        const users = await getAllUsers();
-        
-        // Return the list of users
-        res.status(200).json(users);
-    } catch (error) {
-        // Handle errors
-        console.error('Error fetching users:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
 
 
 app.post('/api/create-trip', async (req: Request, res: Response): Promise<void> => {
     try {
-        // Validate the incoming request data using Zod schema
         const {name, startDate, endDate, description} = TripSchema.parse(req.body);
-
-        // Call the function to create a new trip
         const newTrip = await createTrip(name, startDate, endDate, description ?? "");
-
-        // Send the new trip as a dictionary
         res.status(201).json(newTrip);
     } catch (error) {
         if (error instanceof z.ZodError) {
-            // Handle Zod validation errors
             res.status(400).json({ error: error.errors });
         } else {
             console.error(`Error creating trip:`, error);
@@ -237,17 +218,11 @@ app.post('/api/create-trip', async (req: Request, res: Response): Promise<void> 
 
 app.post('/api/create-user-trip', async (req: Request, res: Response): Promise<void> => {
     try {
-        // Validate the incoming request data using Zod schema
         const {role, user_id, trip_id} = UserTripSchema.parse(req.body);
-
-        // Call the function to create a new user-trip association
         await createUserTrip(role, user_id, trip_id);
-
-        // Send a success message
         res.status(201).json({ message: 'User-trip association created successfully.' });
     } catch (error) {
         if (error instanceof z.ZodError) {
-            // Handle Zod validation errors
             res.status(400).json({ error: error.errors });
         } else {
             console.error(`Error creating user-trip association:`, error);

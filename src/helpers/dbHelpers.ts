@@ -87,17 +87,6 @@ export const getTripsByUserId = async (userId: string) => {
     }
 };
 
-export const getAllUsers = async () => {
-    try {
-        // Fetch all users from the User model without selecting specific fields
-        const users = await prisma.user.findMany();
-
-        return users;
-    } catch (error) {
-        console.error('Error fetching users:', error);
-        throw new Error('Error fetching users');
-    }
-};
 
 
 export const createTrip = async (name: string, startDate: Date, endDate: Date, description: string) => {
