@@ -11,7 +11,7 @@ import {extractLocationAndClassify} from "./helpers/openai"
 import parser from "html-metadata-parser";
 import { getPlaceId,getCoordinatesFromPlaceId } from './helpers/googlemaps';
 import { z } from 'zod';
-import { getTripsByUserId,createContent, createTrip, createUserTrip, getAllUsers, updateContent, getPlaceCacheById, createPin,createPlaceCache } from './helpers/dbHelpers'; // Import helper functions
+import { getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin,createPlaceCache } from './helpers/dbHelpers'; // Import helper functions
 
 
 
@@ -46,8 +46,8 @@ const getMetadata = async (url: string) => {
 const TripSchema = z.object({
     id: z.string().uuid().optional(), // UUID
     name: z.string().min(1, "Trip name is required"),
-    startDate:  z.coerce.date().refine((data) => data > new Date(), {message: 'Start date must be in the future'}),
-    endDate: z.coerce.date().refine((data) => data > new Date(), {message: 'Start date must be in the future'}),
+    startDate:  z.coerce.date().refine((data) => data >= new Date(), {message: 'Start date must be in the future'}),
+    endDate: z.coerce.date().refine((data) => data >= new Date(), {message: 'End date must be in the future'}),
     description: z.string().optional()
   }).refine((data) => data.endDate > data.startDate, {
     message: "End date cannot be earlier than start date.",
