@@ -11,7 +11,7 @@ import {extractLocationAndClassify} from "./helpers/openai"
 import parser from "html-metadata-parser";
 import { getPlaceId,getCoordinatesFromPlaceId } from './helpers/googlemaps';
 import { z } from 'zod';
-import { getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin,createPlaceCache } from './helpers/dbHelpers'; // Import helper functions
+import { getContentPinsPlaceNested,getTripContentData,getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin,createPlaceCache } from './helpers/dbHelpers'; // Import helper functions
 
 
 
@@ -230,6 +230,40 @@ app.post('/api/create-user-trip', async (req: Request, res: Response): Promise<v
         }
     }
 })
+
+
+
+// Zod schema for validating tripId
+const tripIdSchema = z.object({
+    tripId: z.string().uuid(),
+});
+
+app.get('/api/trip/:tripId/content', async (req: Request, res: Response): Promise<void> => {
+    try {
+        // Validate request parameters
+        const { tripId } = tripIdSchema.parse(req.params);
+
+        // Fetch content, pins, and place cache separately
+        const { contentList, pinsList, placeCacheList } = await getTripContentData(tripId);
+
+
+        const nested = await getContentPinsPlaceNested(tripId)
+
+        
+
+        // Return as three separate arrays
+        res.status(200).json({
+            contents: contentList,
+            pins: pinsList,
+            placeCaches: placeCacheList,
+            nestedData: nested
+        });
+    } catch (error) {
+        console.error("Error fetching trip data:", error);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
 
 
 // Start the server

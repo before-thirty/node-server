@@ -109,3 +109,69 @@ export const createUserTrip = async (role: string, userId: string, tripId: strin
         }
     });
 }
+
+
+export const getTripContentData = async (tripId: string) => {
+    // Fetch all content linked to the trip
+    const contentList = await prisma.content.findMany({
+        where: { tripId },
+        select: {
+            id: true,
+            url: true,
+            structuredData: true,
+            userId: true,
+            tripId: true,
+        },
+    });
+
+    // Fetch all pins related to those content entries
+    const pinsList = await prisma.pin.findMany({
+        where: {
+            contentId: { in: contentList.map(content => content.id) },
+        },
+        select: {
+            id: true,
+            name: true,
+            category: true,
+            description: true,
+            contentId: true,   // Foreign key linking to content
+            placeCacheId: true, // Foreign key linking to place cache
+        },
+    });
+
+    // Fetch all place cache entries related to those pins
+    const placeCacheList = await prisma.placeCache.findMany({
+        where: {
+            id: { in: pinsList.map(pin => pin.placeCacheId).filter((id): id is string => id !== null) },
+        },
+        select: {
+            id: true,
+            placeId: true,
+            lat: true,
+            lng: true,
+        },
+    });
+    
+
+    return { contentList, pinsList, placeCacheList };
+};
+
+export const getContentPinsPlaceNested = async (tripId: string) => {
+    // === Fetch Nested Data Separately ===
+    const nestedTrip = await prisma.trip.findUnique({
+        where: { id: tripId },
+        include: {
+            contents: {
+                include: {
+                    pins: {
+                        include: {
+                            placeCache: true,
+                        },
+                    },
+                },
+            },
+        },
+    });
+    return nestedTrip
+}
+
