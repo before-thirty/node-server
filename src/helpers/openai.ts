@@ -145,8 +145,8 @@ export async function extractLocationAndClassifyGemini(
                 "location": "<Address, City, Country>",
                 "classification": "<One of: Food, Night life, Outdoor, Activities, Attraction>",
                 "additional_info": "<Any other relevant details from the caption>",
-                "lat": <Latitude as a number>,
-                "long": <Longitude as a number>
+                "lat": "<Latitude as a string>",
+                "long": "<Longitude as a string>"
               }
             ]
             \`\`\`
@@ -167,8 +167,8 @@ export async function extractLocationAndClassifyGemini(
                 "location": "Tsukiji Market, Tokyo, Japan",
                 "classification": "Food",
                 "additional_info": "Famous sushi spot in Tsukiji Market, popular for fresh seafood.",
-                "lat": 35.6655,
-                "long": 139.7708
+                "lat": "35.6655",
+                "long": "139.7708"
               }
             ]
             \`\`\`

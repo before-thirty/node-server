@@ -93,7 +93,7 @@ app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<v
         const newContent = await createContent(url, description, user_id, trip_id);
 
         // Extract structured data using AI
-        const analysis = await extractLocationAndClassifyGemini(description ?? "");
+        const analysis = await extractLocationAndClassify(description ?? "");
 
         // Update the Content entry with structured data
         await updateContent(newContent.id, analysis);
