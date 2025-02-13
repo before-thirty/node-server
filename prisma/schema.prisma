@@ -78,12 +78,19 @@ model Pin {
 }
 
 model PlaceCache {
-  id          String    @id @default(uuid())
-  placeId     String    @unique
-  lat         Float
-  lng         Float
-  createdAt   DateTime  @default(now())
-  lastCached  DateTime
-  pins        Pin[]     // PlaceCache can have many Pins
+  id                  String    @id @default(uuid())
+  placeId             String    @unique
+  name                String?
+  rating             Float?   // Optional, as not all places have ratings
+  userRatingCount    Int?     // Optional, for user rating count
+  websiteUri         String?  // Optional, for the website URL
+  currentOpeningHours Json?    // Optional, store as JSON if structure is complex
+  regularOpeningHours Json?    // Optional, store as JSON for regular hours
+  lat                 Float
+  lng                 Float
+  createdAt           DateTime  @default(now())
+  lastCached          DateTime
+  pins                Pin[]     // PlaceCache can have many Pins
 }
+
 

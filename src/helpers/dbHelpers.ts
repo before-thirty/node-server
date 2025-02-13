@@ -33,26 +33,49 @@ export const getPlaceCacheById = async (placeId: string) => {
     });
 };
 
-// Function to create a new PlaceCache entry
-export const createPlaceCache = async (placeId: string, coordinates: { lat: number, lng: number }) => {
+// Function to create a new PlaceCache entry with full details
+export const createPlaceCache = async (placeDetails: {
+    placeId: string;
+    name: string;
+    rating: number | null;
+    userRatingCount: number | null;
+    websiteUri: string | null;
+    currentOpeningHours: any | null;
+    regularOpeningHours: any | null;
+    lat: number;
+    lng: number;
+}) => {
     return await prisma.placeCache.create({
         data: {
-            placeId: placeId,
-            lat: coordinates.lat,
-            lng: coordinates.lng,
+            placeId: placeDetails.placeId,
+            name: placeDetails.name,
+            rating: placeDetails.rating,
+            userRatingCount: placeDetails.userRatingCount,
+            websiteUri: placeDetails.websiteUri,
+            currentOpeningHours: placeDetails.currentOpeningHours,
+            regularOpeningHours: placeDetails.regularOpeningHours,
+            lat: placeDetails.lat,
+            lng: placeDetails.lng,
             lastCached: new Date(),
         },
     });
 };
 
+
 // Create a new Pin linked to the Content and PlaceCache
-export const createPin = async (name: string, category: string, contentId: string, placeCacheId: string) => {
+export const createPin = async (pinDetails: {
+    name: string;
+    category: string;
+    contentId: string;
+    placeCacheId: string;
+    coordinates: { lat: number; lng: number };
+}) => {
     return await prisma.pin.create({
         data: {
-            name: name ?? "Unnamed Pin",
-            category: category ?? "Uncategorized",
-            contentId: contentId,
-            placeCacheId: placeCacheId,
+            name: pinDetails.name ?? "Unnamed Pin",
+            category: pinDetails.category ?? "Uncategorized",
+            contentId: pinDetails.contentId,
+            placeCacheId: pinDetails.placeCacheId,
         },
     });
 };
@@ -143,13 +166,7 @@ export const getTripContentData = async (tripId: string) => {
     const placeCacheList = await prisma.placeCache.findMany({
         where: {
             id: { in: pinsList.map(pin => pin.placeCacheId).filter((id): id is string => id !== null) },
-        },
-        select: {
-            id: true,
-            placeId: true,
-            lat: true,
-            lng: true,
-        },
+        }
     });
     
 

@@ -7,11 +7,11 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import { logger, requestLogger } from "./middleware/logger"
-import {extractLocationAndClassify} from "./helpers/openai"
+import {extractLocationAndClassify,extractLocationAndClassifyGemini} from "./helpers/openai"
 import parser from "html-metadata-parser";
-import { getPlaceId,getCoordinatesFromPlaceId } from './helpers/googlemaps';
+import { getPlaceId,getFullPlaceDetails,getCoordinatesFromPlaceId } from './helpers/googlemaps';
 import { z } from 'zod';
-import { getContentPinsPlaceNested,getTripContentData,getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin,createPlaceCache } from './helpers/dbHelpers'; // Import helper functions
+import { createPlaceCache,getContentPinsPlaceNested,getTripContentData,getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin } from './helpers/dbHelpers'; // Import helper functions
 
 
 
@@ -71,8 +71,7 @@ const UserTripSchema = z.object({
 app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<void> => {
     try {
         // Validate the request body using Zod
-        const validatedData = ContentSchema.parse(req.body); // This will throw an error if validation fails
-
+        const validatedData = ContentSchema.parse(req.body);
         const { url, content, user_id, trip_id } = validatedData;
 
         req.logger?.info(`Request received: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`);
@@ -90,12 +89,11 @@ app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<v
             return;
         }
 
-        // create db entry for content
+        // Create a DB entry for content
         const newContent = await createContent(url, description, user_id, trip_id);
 
-
         // Extract structured data using AI
-        const analysis = await extractLocationAndClassify(description ?? "");
+        const analysis = await extractLocationAndClassifyGemini(description ?? "");
 
         // Update the Content entry with structured data
         await updateContent(newContent.id, analysis);
@@ -104,29 +102,62 @@ app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<v
         const responses = await Promise.all(
             analysis.map(async (analysis) => {
                 const full_loc = (analysis.name ?? "") + " " + (analysis.location ?? "");
+                
+                // Step 1: Get Place ID
                 const placeId = await getPlaceId(full_loc);
 
                 let coordinates;
                 let placeCacheId;
 
-                const placeCache = await getPlaceCacheById(placeId);
+                // Step 2: Check if the place exists in the cache
+                let placeCache = await getPlaceCacheById(placeId);
 
+                if (!placeCache) {
+                    // Step 3: If not in cache, fetch full place details
+                    const placeDetails = await getFullPlaceDetails(full_loc);
 
-                if (placeCache){
-                    coordinates = { lat: placeCache.lat, lng: placeCache.lng };
-                    placeCacheId = placeCache.id;
-                }else {
                     coordinates = await getCoordinatesFromPlaceId(placeId);
-                    // Create new place cache
-                    const newPlaceCache = await createPlaceCache(placeId, coordinates);
-                    placeCacheId = newPlaceCache.id;
+
+                    // Step 4: Store in cache
+                    placeCache = await createPlaceCache({
+                        placeId: placeDetails.id,
+                        name: placeDetails.name,
+                        rating: placeDetails.rating ?? null,
+                        userRatingCount: placeDetails.userRatingCount ?? null,
+                        websiteUri: placeDetails.websiteUri ?? null,
+                        currentOpeningHours: placeDetails.currentOpeningHours,
+                        regularOpeningHours: placeDetails.regularOpeningHours,
+                        lat: coordinates.lat,
+                        lng: coordinates.lng
+                    });
+                } else {
+                    coordinates = { lat: placeCache.lat, lng: placeCache.lng };
                 }
 
+                placeCacheId = placeCache.id;
 
-                await createPin(analysis.name??"", analysis.classification??"", newContent.id, placeCacheId);
-                // Fetch coordinates from PlaceId (assuming getCoordinatesFromPlaceId is a utility function)
-                
-                return { ...analysis, coordinates };
+                // Step 5: Create Pin linked to PlaceCache
+                await createPin({
+                    name: analysis.name ?? "",
+                    category: analysis.classification ?? "",
+                    contentId: newContent.id,
+                    placeCacheId: placeCacheId,
+                    coordinates: coordinates
+                });
+
+                return {
+                    ...analysis,
+                    placeCacheId,
+                    coordinates,
+                    placeDetails: {
+                        name: placeCache.name,
+                        rating: placeCache.rating,
+                        userRatingCount: placeCache.userRatingCount,
+                        websiteUri: placeCache.websiteUri,
+                        currentOpeningHours: placeCache.currentOpeningHours,
+                        regularOpeningHours: placeCache.regularOpeningHours,
+                    }
+                };
             })
         );
 
@@ -143,6 +174,9 @@ app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<v
         }
     }
 });
+
+
+
 // Define internal route stubs
 // Route to extract place details from ChatGPT API
 const fetchPlaceDetails = async (caption: string): Promise<{ placeName: string; city: string; country: string }> => {

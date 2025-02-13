@@ -1,10 +1,13 @@
 import axios from "axios";
 import { OpenAI } from "openai";
 import dotenv from "dotenv";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 
 dotenv.config(); // Load .env variables
 
 const OPEN_AI_API_KEY = process.env.OPEN_AI_API_KEY;
+const GOOGLE_GEMINI_KEY = process.env.GOOGLE_GEMINI_KEY;
 
 const openaiClient = new OpenAI({
   apiKey: OPEN_AI_API_KEY,
@@ -31,22 +34,59 @@ export async function extractLocationAndClassify(
       messages: [
         {
           role: "system",
-          content: `I am going to feed a series of captions from reels on Instagram. They might be about restaurants or sightseeing places, etc.
-                    I want to extract information in the following structure:
-                    - Categorize the place into either "restaurant" or "tourist spot"
-                    - Find out which city the place is located in
-                    - Provide the name of the place
-                    - The next message will contain the first caption
+          content: `
+            You are extracting structured location-based information from Instagram captions. 
 
-                    Please return the information **only in pure JSON format** with no additional text or explanations:
+            ## **Instructions**:
+            1. Analyze the caption and identify **any locations** mentioned.
+            2. Categorize each place as either:
+              - **"restaurant"** (for food-related places) or
+              - **"tourist spot"** (for sightseeing and attractions).
+            3. Identify the **city and country** where the place is located.
+            4. Use **Google Maps Extension ** to find the **latitude and longitude**.
+            5. Extract any **additional useful details** from the caption.
+            6. **Return only valid JSON with no extra text or explanations.**
 
-                    {
-                    "name": "<Name of the place being talked about in the reel>",
-                    "location": "<Any information about the address, city, and country>",
-                    "classification": "<One of: Food, Night life, Outdoor, Activities, Attraction. Based on the type of place the caption is describing>",
-                    "additional_info": "<Any other info in the caption relevant to the user>"
-                    }
-                    Return the response always as a list of JSON.. if there is a single location there will be only one item in the list else multiple JSON in the list.. if there are multiple places there might be a numbered list`
+            ---
+
+            ## **Output Format (JSON)**
+            [
+              {
+                "name": "<Place Name>",
+                "location": "<Address, City, Country>",
+                "classification": "<One of: Food, Night life, Outdoor, Activities, Attraction>",
+                "additional_info": "<Any other relevant details from the caption>",
+                "lat": <Latitude as a number>,
+                "long": <Longitude as a number>
+              }
+            ]
+
+            ---
+
+            ## **Example Input**
+            **Caption**:  
+            *"Had an amazing sushi experience at Sushi Dai in Tokyo! 🍣 Highly recommend this place in Tsukiji Market!"*
+
+            ---
+
+            ## **Example Output**
+            
+            [
+              {
+                "name": "Sushi Dai",
+                "location": "Tsukiji Market, Tokyo, Japan",
+                "classification": "Food",
+                "additional_info": "Famous sushi spot in Tsukiji Market, popular for fresh seafood.",
+                "lat": 35.6655,
+                "long": 139.7708
+              }
+            ]
+            
+
+            ---
+
+            **Now, extract the location details for the following caption:**  
+            `
 
         },
         {
@@ -68,4 +108,95 @@ export async function extractLocationAndClassify(
     throw new Error("Failed to analyze caption.");
   }
 }
+
+
+
+export async function extractLocationAndClassifyGemini(
+  caption: string
+): Promise<CaptionAnalysisResponse[]> {
+  try {
+    if (!process.env.GOOGLE_GEMINI_KEY) {
+      throw new Error("GOOGLE_GEMINI_KEY is not set in environment variables");
+    }
+
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite-preview-02-05" });
+
+    const prompt = `
+            You are extracting structured location-based information from Instagram captions. 
+
+            ## **Instructions**:
+            1. Analyze the caption and identify **any locations** mentioned.
+            2. Categorize each place as either:
+              - **"restaurant"** (for food-related places) or
+              - **"tourist spot"** (for sightseeing and attractions).
+            3. Identify the **city and country** where the place is located.
+            4. Use **Google Maps data** to find the **latitude and longitude**.
+            5. Extract any **additional useful details** from the caption.
+            6. **Return only valid JSON with no extra text or explanations.**
+
+            ---
+
+            ## **Output Format (JSON)**
+            \`\`\`json
+            [
+              {
+                "name": "<Place Name>",
+                "location": "<Address, City, Country>",
+                "classification": "<One of: Food, Night life, Outdoor, Activities, Attraction>",
+                "additional_info": "<Any other relevant details from the caption>",
+                "lat": <Latitude as a number>,
+                "long": <Longitude as a number>
+              }
+            ]
+            \`\`\`
+
+            ---
+
+            ## **Example Input**
+            **Caption**:  
+            *"Had an amazing sushi experience at Sushi Dai in Tokyo! 🍣 Highly recommend this place in Tsukiji Market!"*
+
+            ---
+
+            ## **Example Output**
+            \`\`\`json
+            [
+              {
+                "name": "Sushi Dai",
+                "location": "Tsukiji Market, Tokyo, Japan",
+                "classification": "Food",
+                "additional_info": "Famous sushi spot in Tsukiji Market, popular for fresh seafood.",
+                "lat": 35.6655,
+                "long": 139.7708
+              }
+            ]
+            \`\`\`
+
+            ---
+
+            **Now, extract the location details for the following caption:**  
+            **Caption:** "${caption}"
+            `;
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json", // Ensures JSON output
+      },
+    });
+
+    const content = result.response.text();
+    if (!content) throw new Error("No response content from Gemini");
+
+    console.log("Raw API response content:", content);
+
+    return JSON.parse(content) as CaptionAnalysisResponse[];
+  } catch (error) {
+    console.error("Error calling Gemini API:", error);
+    throw new Error("Failed to analyze caption.");
+  }
+}
+
+
 
