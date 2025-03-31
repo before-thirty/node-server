@@ -2,6 +2,8 @@ import axios from "axios";
 import { OpenAI } from "openai";
 import dotenv from "dotenv";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import express, { Request, Response } from 'express';
+
 
 
 dotenv.config(); // Load .env variables
@@ -26,7 +28,7 @@ export interface CaptionAnalysisResponse {
 }
 
 export async function extractLocationAndClassify(
-  caption: string
+  caption: string,req: Request
 ): Promise<CaptionAnalysisResponse[]> {
   try {
     const response = await openaiClient.chat.completions.create({
@@ -46,6 +48,7 @@ export async function extractLocationAndClassify(
             4. Use **Google Maps Extension ** to find the **latitude and longitude**.
             5. Extract any **additional useful details** from the caption.
             6. **Return only valid JSON with no extra text or explanations.**
+            7. Transalte the text to ENGLISH if it is in any other language wherever possible
 
             ---
 
@@ -97,14 +100,14 @@ export async function extractLocationAndClassify(
     });
 
     // Parse and return the JSON object from the response
-    console.log(response.choices)
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error("No response content from OpenAI");
-    console.log("Raw API response content:", content);
+    req.logger?.debug(`Response from ChatGPT ${content}`)
 
     return JSON.parse(content) as CaptionAnalysisResponse[];
+
   } catch (error) {
-    console.error("Error calling OpenAI API:", error);
+    req.logger?.debug("Error calling OpenAI API:", error);
     throw new Error("Failed to analyze caption.");
   }
 }
@@ -146,7 +149,8 @@ export async function extractLocationAndClassifyGemini(
                 "classification": "<One of: Food, Night life, Outdoor, Activities, Attraction>",
                 "additional_info": "<Any other relevant details from the caption>",
                 "lat": "<Latitude as a string>",
-                "long": "<Longitude as a string>"
+                "long": "<Longitude as a string>",
+                "gemini_details":"Anything else you know about this spot from your memory"
               }
             ]
             \`\`\`

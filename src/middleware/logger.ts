@@ -11,7 +11,7 @@ const customFormat = format.printf(({ level, message, timestamp, requestId }: Lo
 
 // Create a logger instance
 const logger: Logger = createLogger({
-    level: 'info',
+    level: 'debug',
     format: format.combine(
         format.timestamp(),
         format.errors({ stack: true }),

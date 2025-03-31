@@ -1,19 +1,15 @@
 // Importing required modules
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response } from 'express';
 import morgan from 'morgan';
-import { v4 as uuidv4 } from 'uuid';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
-import mongoose from 'mongoose';
 import cors from 'cors';
-import { logger, requestLogger } from "./middleware/logger"
+import { requestLogger } from "./middleware/logger"
 import {extractLocationAndClassify,extractLocationAndClassifyGemini} from "./helpers/openai"
 import parser from "html-metadata-parser";
 import { getPlaceId,getFullPlaceDetails,getCoordinatesFromPlaceId } from './helpers/googlemaps';
 import { z } from 'zod';
 import { createPlaceCache,getContentPinsPlaceNested,getTripContentData,getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin } from './helpers/dbHelpers'; // Import helper functions
-
-
 
 // Load environment variables from .env file
 dotenv.config();
@@ -32,6 +28,7 @@ app.use(morgan('dev')); // HTTP request logger for development
 // app.use('/api', routes);
 
 // Connect to MongoDB Atlas
+
 
 const getMetadata = async (url: string) => {
     try {
@@ -80,23 +77,27 @@ app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<v
 
         // If content is empty, fetch metadata from the URL
         if (!content || content.trim() === "") {
+            req.logger?.debug(`The request doesnt contains content fetching metadata from URL`)
             const metadata = await getMetadata(url);
             description = metadata?.meta.description ?? "";
         }
 
         if (!description) {
+            req.logger?.error(`Failed to fetch metadata for URL - ${url}`)
             res.status(404).json({ error: "Could not fetch metadata for the given URL" });
             return;
         }
 
         // Create a DB entry for content
         const newContent = await createContent(url, description, user_id, trip_id);
+        req.logger?.debug(`Create new content entry ${newContent.id}`)
 
         // Extract structured data using AI
-        const analysis = await extractLocationAndClassify(description ?? "");
+        const analysis = await extractLocationAndClassify(description ?? "",req);
 
         // Update the Content entry with structured data
         await updateContent(newContent.id, analysis);
+        req.logger?.debug(`Updated content entry with structured data ${newContent.id}`)
 
         // Process each analysis object in the list
         const responses = await Promise.all(
@@ -104,7 +105,7 @@ app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<v
                 const full_loc = (analysis.name ?? "") + " " + (analysis.location ?? "");
                 
                 // Step 1: Get Place ID
-                const placeId = await getPlaceId(full_loc);
+                const placeId = await getPlaceId(full_loc,req);
 
                 let coordinates;
                 let placeCacheId;
@@ -113,10 +114,15 @@ app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<v
                 let placeCache = await getPlaceCacheById(placeId);
 
                 if (!placeCache) {
+                    req.logger?.debug("Could not find place in place Cache.. getting full place details")
                     // Step 3: If not in cache, fetch full place details
-                    const placeDetails = await getFullPlaceDetails(full_loc);
+                    const placeDetails = await getFullPlaceDetails(full_loc,req);
 
-                    coordinates = await getCoordinatesFromPlaceId(placeId);
+                    req.logger?.debug(`Place details for placeID - ${placeId} is - ${placeDetails}`)                    
+
+                    coordinates = await getCoordinatesFromPlaceId(placeId,req);
+
+                    req.logger?.debug(`Coordinates for placeID - ${placeId} is - ${coordinates}`)  
 
                     // Step 4: Store in cache
                     placeCache = await createPlaceCache({
@@ -128,22 +134,27 @@ app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<v
                         currentOpeningHours: placeDetails.currentOpeningHours,
                         regularOpeningHours: placeDetails.regularOpeningHours,
                         lat: coordinates.lat,
-                        lng: coordinates.lng
+                        lng: coordinates.lng,
+                        images: placeDetails.images ?? []
                     });
+
+                    req.logger?.debug(`Created new entry in place cache ${placeCache.id} for placeID ${placeId}`)
                 } else {
+                    req.logger?.debug(`Found place id - ${placeId} in place cache`)
                     coordinates = { lat: placeCache.lat, lng: placeCache.lng };
                 }
 
                 placeCacheId = placeCache.id;
 
                 // Step 5: Create Pin linked to PlaceCache
-                await createPin({
+                const pin = await createPin({
                     name: analysis.name ?? "",
                     category: analysis.classification ?? "",
                     contentId: newContent.id,
                     placeCacheId: placeCacheId,
                     coordinates: coordinates
                 });
+                req.logger?.info(`Created Pin - ${pin.id} with content_id - ${newContent.id} and place_id - ${placeCacheId}`)
 
                 return {
                     ...analysis,
@@ -156,6 +167,7 @@ app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<v
                         websiteUri: placeCache.websiteUri,
                         currentOpeningHours: placeCache.currentOpeningHours,
                         regularOpeningHours: placeCache.regularOpeningHours,
+                        images:placeCache.images
                     }
                 };
             })
@@ -174,23 +186,6 @@ app.post('/api/extract-lat-long', async (req: Request, res: Response): Promise<v
         }
     }
 });
-
-
-
-// Define internal route stubs
-// Route to extract place details from ChatGPT API
-const fetchPlaceDetails = async (caption: string): Promise<{ placeName: string; city: string; country: string }> => {
-    console.log(`Extracting place details from caption: "${caption}"`);
-    // Placeholder: Call ChatGPT API and return JSON
-    return { placeName: 'Example Place', city: 'Example City', country: 'Example Country' };
-};
-
-// Route to fetch lat-long using Google Maps API
-const fetchLatLong = async (placeData: { placeName: string; city: string; country: string }): Promise<{ lat: number; long: number }> => {
-    console.log(`Fetching lat-long for: ${JSON.stringify(placeData)}`);
-    // Placeholder: Call Google Maps Geocoding API
-    return { lat: 12.9716, long: 77.5946 }; // Example lat-long for Bangalore, India
-};
 
 
 
@@ -305,20 +300,3 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
-
-// Directory structure:
-// project-root/
-// ├── routes/
-// │   ├── index.ts (future expansion for modular routes)
-// ├── server.ts (main entry point)
-// ├── .env (environment variables)
-// ├── package.json
-// ├── node_modules/
-
-/* Best practices:
-1. Use environment variables for sensitive data (e.g., API keys).
-2. Add input validation for all endpoints.
-3. Modularize route files for better maintainability.
-4. Implement error handling for async calls.
-5. Use logging libraries like Winston for better logging capabilities in production.
-*/

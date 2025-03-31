@@ -90,6 +90,7 @@ model PlaceCache {
   lng                 Float
   createdAt           DateTime  @default(now())
   lastCached          DateTime
+  images              String[]
   pins                Pin[]     // PlaceCache can have many Pins
 }
 

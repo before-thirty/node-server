@@ -44,6 +44,7 @@ export const createPlaceCache = async (placeDetails: {
     regularOpeningHours: any | null;
     lat: number;
     lng: number;
+    images: string[];
 }) => {
     return await prisma.placeCache.create({
         data: {
@@ -57,6 +58,7 @@ export const createPlaceCache = async (placeDetails: {
             lat: placeDetails.lat,
             lng: placeDetails.lng,
             lastCached: new Date(),
+            images: placeDetails.images
         },
     });
 };
