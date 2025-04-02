@@ -215,3 +215,30 @@ export const getContentPinsPlaceNested = async (tripId: string) => {
   });
   return nestedTrip;
 };
+
+export const addUserToTrip = async (tripId: string, userId: string) => {
+  const tripUser = await prisma.tripUser.create({
+    data: {
+      userId: userId,
+      tripId: tripId,
+      role: "Admin", 
+    },
+  });
+
+  // need to add socket.io code here
+  
+  return tripUser;
+}
+
+export const getUsersFromTrip = async (tripId: string) => {
+  const users = await prisma.trip.findUnique({
+    where: { id: tripId },
+    include: { tripUsers: true },
+  });
+  // users is json object with tripUsers array
+  if (users) {
+    return users.tripUsers.map((tripUser) => tripUser.userId);
+  } else {
+    return [];
+  };
+}

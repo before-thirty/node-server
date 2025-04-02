@@ -9,7 +9,7 @@ import {extractLocationAndClassify,extractLocationAndClassifyGemini} from "./hel
 import parser from "html-metadata-parser";
 import { getPlaceId,getFullPlaceDetails,getCoordinatesFromPlaceId } from './helpers/googlemaps';
 import { z } from 'zod';
-import { createPlaceCache,getContentPinsPlaceNested,getTripContentData,getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin } from './helpers/dbHelpers'; // Import helper functions
+import { createPlaceCache,getContentPinsPlaceNested,getTripContentData,getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin, addUserToTrip, getTripById, getUsersFromTrip} from './helpers/dbHelpers'; // Import helper functions
 
 // Load environment variables from .env file
 dotenv.config();
@@ -318,6 +318,35 @@ app.get(
     }
   }
 );
+
+app.post(
+  "/api/add-user-to-trip",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { user_id, trip_id } = req.body;
+      console.log(user_id, trip_id);
+      await addUserToTrip(trip_id, user_id);
+      res.status(201).json({ message: "User added to trip successfully." });
+    } catch (error) {
+      console.error("Error adding user to trip:", error);
+      res.status(500).json({ error: "Internal server error." });  }
+  }
+);
+
+app.get(
+  "/api/getUsersFromTrip",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { tripId } = req.query;
+      const users = await getUsersFromTrip(tripId as string);
+      res.status(200).json(users);
+    } catch (error) {
+      console.error("Error fetching users from trip:", error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+)
+    
 
 // Start the server
 const PORT = process.env.PORT || 5000;
