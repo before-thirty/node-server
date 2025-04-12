@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, User } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -116,6 +116,52 @@ export const getTripsByUserId = async (userId: string) => {
   }
 };
 
+export interface UserModel {
+  id: string;
+  name: string;
+  email: string;
+  phoneNumber: string;
+  firebaseId: string;
+}
+
+export const getUserByFirebaseId = async (
+  firebaseId: string
+): Promise<UserModel | null> => {
+  return await prisma.user.findFirst({
+    // TODO: change to findUnique once firebaseId is unique
+    where: { firebaseId },
+  });
+};
+
+export const createTripAndTripUser = async (
+  userId: string,
+  name: string,
+  startDate: Date,
+  endDate: Date,
+  description: string
+) => {
+  return await prisma.$transaction(async (tx) => {
+    const trip = await tx.trip.create({
+      data: {
+        name,
+        startDate,
+        endDate,
+        description,
+      },
+    });
+
+    await tx.tripUser.create({
+      data: {
+        role: "owner",
+        userId: userId,
+        tripId: trip.id,
+      },
+    });
+
+    return trip;
+  });
+};
+
 export const createTrip = async (
   name: string,
   startDate: Date,
@@ -128,6 +174,22 @@ export const createTrip = async (
       startDate: startDate ?? "NA",
       endDate: endDate ?? "NA",
       description: description,
+    },
+  });
+};
+
+export const createUser = async (
+  name: string,
+  email: string,
+  phoneNumber: string,
+  firebaseId: string
+) => {
+  return await prisma.user.create({
+    data: {
+      firebaseId: firebaseId,
+      name: name,
+      email: email,
+      phoneNumber: phoneNumber,
     },
   });
 };

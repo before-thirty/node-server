@@ -1,12 +1,10 @@
 // Importing required modules
 import express, { Request, Response, NextFunction } from "express";
 import morgan from "morgan";
-import { v4 as uuidv4 } from "uuid";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
-import mongoose from "mongoose";
 import cors from "cors";
-import { logger, requestLogger } from "./middleware/logger";
+import { requestLogger } from "./middleware/logger";
 import {
   extractLocationAndClassify,
   extractLocationAndClassifyGemini,
@@ -30,7 +28,13 @@ import {
   getPlaceCacheById,
   createPin,
   getTripById,
+  createUser,
+  getUserByFirebaseId,
+  createTripAndTripUser,
 } from "./helpers/dbHelpers"; // Import helper functions
+import { PrismaClient } from "@prisma/client";
+import { authenticate } from "./middleware/currentUser";
+import { getDummyStartAndEndDate } from "./utils/jsUtils";
 
 // Load environment variables from .env file
 dotenv.config();
@@ -58,6 +62,14 @@ const getMetadata = async (url: string) => {
     return null;
   }
 };
+
+const UserSchema = z.object({
+  id: z.string().uuid().optional(), // UUID
+  name: z.string().min(1, "User name is required"),
+  email: z.string(),
+  phoneNumber: z.string(),
+  firebaseId: z.string(),
+});
 
 const TripSchema = z
   .object({
@@ -90,6 +102,15 @@ const UserTripSchema = z.object({
   trip_id: z.string().uuid(),
 });
 // Define primary route
+
+app.get("/api/status", async (req: Request, res: Response) => {
+  res.status(200).json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    userId: "67580046-2ff8-4e92-9eec-8263cf908616",
+  });
+});
+
 app.post(
   "/api/extract-lat-long",
   async (req: Request, res: Response): Promise<void> => {
@@ -242,20 +263,22 @@ const userTripsSchema = z.object({
 });
 app.get(
   "/api/user-trips",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      // Validate the incoming query using Zod schema
-      const { user_id } = userTripsSchema.parse(req.query);
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        throw new Error("User not authenticated");
+      }
 
-      // Call the helper function to get the trips by user ID
-      const trips = await getTripsByUserId(user_id);
+      const { id } = currentUser;
 
+      const trips = await getTripsByUserId(id);
       if (trips.length === 0) {
         res.status(404).json({ error: "No trips found for the given user." });
         return;
       }
 
-      // Send the trips as a list of dictionaries
       res.status(200).json(trips);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -276,19 +299,70 @@ app.get("/api/health", async (req: Request, res: Response) => {
   });
 });
 
+app.post("/api/users", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name, email, phoneNumber, firebaseId } = UserSchema.parse(req.body);
+    const newUser = await createUser(name, email, phoneNumber, firebaseId);
+    res.status(201).json(newUser);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: error.errors });
+    } else {
+      console.error(`Error creating trip:`, error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+});
+
+app.post("/api/signin-with-google", async (req, res) => {
+  const { firebaseId, name, email, phoneNumber } = UserSchema.parse(req.body);
+  const prisma = new PrismaClient();
+
+  try {
+    let user = await getUserByFirebaseId(firebaseId);
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          firebaseId,
+          name,
+          email,
+          phoneNumber,
+        },
+      });
+    }
+
+    const trips = await getTripsByUserId(user.id);
+    const currentTripId = trips[0]?.id;
+
+    res.status(200).json({ ...user, currentTripId });
+  } catch (error) {
+    console.error("Error in get-or-create-user:", error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});
+
 app.post(
   "/api/create-trip",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { name, startDate, endDate, description } = TripSchema.parse(
-        req.body
-      );
-      const newTrip = await createTrip(
+      const { name, description } = req.body;
+      const user = req.currentUser;
+      if (user == null) {
+        throw new Error("User not authenticated");
+      }
+      const { startDate, endDate } = getDummyStartAndEndDate();
+      console.log("WHy is log not working wtf");
+      console.log("what is start and end date", startDate, endDate);
+      const newTrip = await createTripAndTripUser(
+        user.id,
         name,
         startDate,
         endDate,
         description ?? ""
       );
+      console.log("Look at new trip", newTrip);
       res.status(201).json(newTrip);
     } catch (error) {
       if (error instanceof z.ZodError) {
