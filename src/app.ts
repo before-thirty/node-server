@@ -399,6 +399,13 @@ app.post(
 const tripIdSchema = z.object({
   tripId: z.string().uuid(),
 });
+// Query parameters schema
+const tripContentQuerySchema = z.object({
+  userLastLogin: z.string()
+    .regex(/^\d+$/, "Must be a valid Unix timestamp")
+    .transform(val => parseInt(val, 10))
+    .optional(), // Unix timestamp (seconds since epoch)
+});
 
 app.get(
   "/api/trip/:tripId/content",
@@ -407,9 +414,14 @@ app.get(
       // Validate request parameters
       const { tripId } = tripIdSchema.parse(req.params);
 
+      // Validate query parameters
+      const { userLastLogin } = tripContentQuerySchema.parse(req.query);
+
+      const lastLoginDate = userLastLogin ? new Date(userLastLogin * 1000) : null;
+
       // Fetch content, pins, and place cache separately
       const { contentList, pinsList, placeCacheList } =
-        await getTripContentData(tripId);
+        await getTripContentData(tripId,lastLoginDate);
       const trip = await getTripById(tripId);
 
       const nested = await getContentPinsPlaceNested(tripId);

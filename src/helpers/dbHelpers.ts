@@ -215,7 +215,7 @@ export const getTripById = async (tripId: string) => {
   });
 };
 
-export const getTripContentData = async (tripId: string) => {
+export const getTripContentData = async (tripId: string,userLastLogin: Date | null) => {
   // Fetch all content linked to the trip
   const contentList = await prisma.content.findMany({
     where: { tripId },
@@ -225,8 +225,15 @@ export const getTripContentData = async (tripId: string) => {
       structuredData: true,
       userId: true,
       tripId: true,
+      createdAt: true, // Added to check against last login
     },
   });
+
+  // Add isNew flag to content items
+  const contentListWithIsNew = contentList.map(content => ({
+    ...content,
+    isNew: userLastLogin ? content.createdAt > userLastLogin : false,
+  }));
 
   // Fetch all pins related to those content entries
   const pinsList = await prisma.pin.findMany({
@@ -240,8 +247,15 @@ export const getTripContentData = async (tripId: string) => {
       description: true,
       contentId: true, // Foreign key linking to content
       placeCacheId: true, // Foreign key linking to place cache
+      createdAt: true, // Added to check against last login
     },
   });
+
+  // Add isNew flag to pin items
+  const pinsListWithIsNew = pinsList.map(pin => ({
+    ...pin,
+    isNew: userLastLogin ? pin.createdAt > userLastLogin : false,
+  }));
 
   // Fetch all place cache entries related to those pins
   const placeCacheList = await prisma.placeCache.findMany({
@@ -254,7 +268,11 @@ export const getTripContentData = async (tripId: string) => {
     },
   });
 
-  return { contentList, pinsList, placeCacheList };
+  return { 
+    contentList: contentListWithIsNew, 
+    pinsList: pinsListWithIsNew, 
+    placeCacheList 
+  };
 };
 
 export const getContentPinsPlaceNested = async (tripId: string) => {
