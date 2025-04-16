@@ -141,7 +141,7 @@ export const createUserTrip = async (
 ) => {
   return await prisma.tripUser.create({
     data: {
-      role: role ?? "",
+      role: role ?? "Member",
       userId: userId,
       tripId: tripId,
     },
@@ -241,4 +241,45 @@ export const getUsersFromTrip = async (tripId: string) => {
   } else {
     return [];
   };
+}
+
+export const addMessage = async (tripId: string, userId: string, message: string, timestamp: Date) => {
+  const newMessage = await prisma.chatMessage.create({
+    data: {
+      id : crypto.randomUUID(),
+      tripId: tripId,
+      userId: userId,
+      text: message,
+      createdAt: timestamp
+    },
+  });
+  return newMessage;
+}
+
+export const getMessageById = async (tripId: string, messageId: string) => {
+  const response = await prisma.chatMessage.findUnique({
+    where: { id: messageId as string },
+    select: { createdAt: true },
+  });
+  return response;
+}
+
+export const getMessagesByTime = async (tripId: string, beforeDate: string, queryLimit: number) => {
+  const messages = await prisma.chatMessage.findMany({
+    where: {
+      tripId: tripId as string,
+      ...(beforeDate && { createdAt: { lt: beforeDate } }),
+    },
+    orderBy: { createdAt: 'desc' },
+    take: queryLimit,
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  });
+  return messages;
 }

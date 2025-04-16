@@ -9,7 +9,7 @@ import {extractLocationAndClassify,extractLocationAndClassifyGemini} from "./hel
 import parser from "html-metadata-parser";
 import { getPlaceId,getFullPlaceDetails,getCoordinatesFromPlaceId } from './helpers/googlemaps';
 import { z } from 'zod';
-import { createPlaceCache,getContentPinsPlaceNested,getTripContentData,getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin, addUserToTrip, getTripById, getUsersFromTrip} from './helpers/dbHelpers'; // Import helper functions
+import { createPlaceCache,getContentPinsPlaceNested,getTripContentData,getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin, addUserToTrip, getTripById, getUsersFromTrip, addMessage, getMessageById, getMessagesByTime} from './helpers/dbHelpers'; // Import helper functions
 
 // Load environment variables from .env file
 dotenv.config();
@@ -347,6 +347,50 @@ app.get(
   }
 )
     
+// api for sending message
+app.post(
+  "/api/addMessage",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { tripId, userId, message, timestamp } = req.body;
+      await addMessage(
+        tripId,
+        userId,
+        message,
+        timestamp);
+      res.status(200).json({ message: "Message received successfully." });
+    } catch (error) {
+      console.error("Error sending message:", error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+);
+app.get(
+  "/api/getMessagesByTrip",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+    const { tripId, before, limit = 20 } = req.query;
+    if (!tripId) {
+      res.status(400).json({ error: 'tripId is required' });
+      return
+    }
+    const queryLimit = parseInt(limit as string, 10);
+    let beforeDate: Date | undefined = undefined;
+    if (before) {
+      const beforeMessage = await getMessageById(tripId as string, before as string);
+      if (!beforeMessage) {
+        res.status(400).json({ error: 'Invalid "before" message ID' });
+        return
+      }
+      beforeDate = beforeMessage?.createdAt;
+    }
+    const messages = await getMessagesByTime(tripId as string, beforeDate as any, queryLimit as number)
+    res.json(messages);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // Start the server
 const PORT = process.env.PORT || 5000;

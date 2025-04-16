@@ -1,97 +1,103 @@
 generator client {
   provider = "prisma-client-js"
-  schema = "app_data"
+  schema   = "app_chat"
 }
-
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL") // Load from .env
+  url      = env("DATABASE_URL")
 }
 
-
 model User {
-  id         String    @id @default(uuid())
-  name       String
-  email      String    @unique
-  phoneNumber      String    @unique
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  tripUsers  TripUser[]
-  contents   Content[] // Added this to relate to Content model
+  id          String     @id @default(uuid())
+  name        String
+  email       String     @unique
+  phoneNumber String     @unique
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  contents    Content[]
+  Message     ChatMessage[]
+  tripUsers   TripUser[]
 }
 
 model Trip {
-  id         String    @id @default(uuid())
-  name       String
-  startDate  DateTime
-  endDate    DateTime
+  id          String     @id @default(uuid())
+  name        String
+  startDate   DateTime
+  endDate     DateTime
   description String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  tripUsers  TripUser[]
-  contents   Content[] // Added this to relate to Content model
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  contents    Content[]
+  Message     ChatMessage[]
+  tripUsers   TripUser[]
 }
 
 model TripUser {
-  id        String    @id @default(uuid())
+  id        String   @id @default(uuid())
   tripId    String
   userId    String
   role      String
-  createdAt DateTime  @default(now())
+  createdAt DateTime @default(now())
+  trip      Trip     @relation(fields: [tripId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 
-  trip      Trip      @relation(fields: [tripId], references: [id])
-  user      User      @relation(fields: [userId], references: [id])
-
-  @@unique([tripId, userId]) // Prevent duplicate user-trip associations
+  @@unique([tripId, userId])
 }
 
-
-
 model Content {
-  id             String    @id @default(uuid())
+  id             String   @id @default(uuid())
   url            String
   rawData        String
   structuredData String
   userId         String
   tripId         String
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  user           User      @relation(fields: [userId], references: [id]) // Content belongs to one User
-  trip           Trip      @relation(fields: [tripId], references: [id]) // Content belongs to one Trip
-  pins           Pin[]     // List of Pins for this Content
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  trip           Trip     @relation(fields: [tripId], references: [id])
+  user           User     @relation(fields: [userId], references: [id])
+  pins           Pin[]
 }
 
 model Pin {
-  id            String    @id @default(uuid())
-  name          String
-  category      String
-  description   String?
-  contentId     String
-  placeCacheId  String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  content       Content   @relation(fields: [contentId], references: [id]) // Pin belongs to one Content
-  placeCache    PlaceCache? @relation(fields: [placeCacheId], references: [id]) // Pin belongs to optional PlaceCache
+  id           String      @id @default(uuid())
+  name         String
+  category     String
+  description  String?
+  contentId    String
+  placeCacheId String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  content      Content     @relation(fields: [contentId], references: [id])
+  placeCache   PlaceCache? @relation(fields: [placeCacheId], references: [id])
 }
 
 model PlaceCache {
-  id                  String    @id @default(uuid())
-  placeId             String    @unique
+  id                  String   @id @default(uuid())
+  placeId             String   @unique
   name                String?
-  rating             Float?   // Optional, as not all places have ratings
-  userRatingCount    Int?     // Optional, for user rating count
-  websiteUri         String?  // Optional, for the website URL
-  currentOpeningHours Json?    // Optional, store as JSON if structure is complex
-  regularOpeningHours Json?    // Optional, store as JSON for regular hours
+  rating              Float?
+  userRatingCount     Int?
+  websiteUri          String?
+  currentOpeningHours Json?
+  regularOpeningHours Json?
   lat                 Float
   lng                 Float
-  createdAt           DateTime  @default(now())
+  createdAt           DateTime @default(now())
   lastCached          DateTime
   images              String[]
-  pins                Pin[]     // PlaceCache can have many Pins
+  pins                Pin[]
 }
 
-
+model ChatMessage {
+  id        String   @id
+  userId    String
+  text      String
+  createdAt DateTime @default(now())
+  type      String   @default("text")
+  fileUrl   String?
+  fileName  String?
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+}
