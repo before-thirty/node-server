@@ -5,10 +5,7 @@ import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import cors from "cors";
 import { requestLogger } from "./middleware/logger";
-import {
-  extractLocationAndClassify,
-  extractLocationAndClassifyGemini,
-} from "./helpers/openai";
+import { extractLocationAndClassify } from "./helpers/openai";
 import parser from "html-metadata-parser";
 import {
   getPlaceId,
@@ -22,7 +19,6 @@ import {
   getTripContentData,
   getTripsByUserId,
   createContent,
-  createTrip,
   createUserTrip,
   updateContent,
   getPlaceCacheById,
@@ -33,25 +29,17 @@ import {
   createTripAndTripUser,
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
-import { authenticate } from "./middleware/currentUser";
+import { authenticate, dummyAuthenticate } from "./middleware/currentUser";
 import { getDummyStartAndEndDate } from "./utils/jsUtils";
 
-// Load environment variables from .env file
 dotenv.config();
 
-// Initialize the Express app
 const app = express();
+
 app.use(requestLogger);
-// Middleware setup
-app.use(cors()); // Enable Cross-Origin Resource Sharing
-app.use(bodyParser.json()); // Parse JSON bodies
-app.use(morgan("dev")); // HTTP request logger for development
-
-// Define directory structure for routes
-// const routes = require('./routes');
-// app.use('/api', routes);
-
-// Connect to MongoDB Atlas
+app.use(cors());
+app.use(bodyParser.json());
+app.use(morgan("dev"));
 
 const getMetadata = async (url: string) => {
   try {
@@ -71,29 +59,11 @@ const UserSchema = z.object({
   firebaseId: z.string(),
 });
 
-const TripSchema = z
-  .object({
-    id: z.string().uuid().optional(), // UUID
-    name: z.string().min(1, "Trip name is required"),
-    startDate: z.coerce.date().refine((data) => data >= new Date(), {
-      message: "Start date must be in the future",
-    }),
-    endDate: z.coerce.date().refine((data) => data >= new Date(), {
-      message: "End date must be in the future",
-    }),
-    description: z.string().optional(),
-  })
-  .refine((data) => data.endDate > data.startDate, {
-    message: "End date cannot be earlier than start date.",
-    path: ["endDate"],
-  });
-
-// Define the Zod schema for validation
 const ContentSchema = z.object({
-  url: z.string().url(), // URL must be a valid URL
-  content: z.string(), // Content should be a string
-  user_id: z.string().uuid(), // user_id should be a UUID string
-  trip_id: z.string().uuid(), // trip_id should be a UUID string
+  url: z.string().url(),
+  content: z.string(),
+  user_id: z.string().uuid(),
+  trip_id: z.string().uuid(),
 });
 
 const UserTripSchema = z.object({
@@ -101,7 +71,6 @@ const UserTripSchema = z.object({
   user_id: z.string().uuid(),
   trip_id: z.string().uuid(),
 });
-// Define primary route
 
 app.get("/api/status", async (req: Request, res: Response) => {
   res.status(200).json({
@@ -221,7 +190,6 @@ app.post(
       // Respond with the processed data
       res.status(200).json(responses);
     } catch (error) {
-      // Handle Zod validation error
       if (error instanceof z.ZodError) {
         res
           .status(400)
@@ -234,57 +202,24 @@ app.post(
   }
 );
 
-// Define internal route stubs
-// Route to extract place details from ChatGPT API
-const fetchPlaceDetails = async (
-  caption: string
-): Promise<{ placeName: string; city: string; country: string }> => {
-  console.log(`Extracting place details from caption: "${caption}"`);
-  // Placeholder: Call ChatGPT API and return JSON
-  return {
-    placeName: "Example Place",
-    city: "Example City",
-    country: "Example Country",
-  };
-};
-
-// Route to fetch lat-long using Google Maps API
-const fetchLatLong = async (placeData: {
-  placeName: string;
-  city: string;
-  country: string;
-}): Promise<{ lat: number; long: number }> => {
-  console.log(`Fetching lat-long for: ${JSON.stringify(placeData)}`);
-  // Placeholder: Call Google Maps Geocoding API
-  return { lat: 12.9716, long: 77.5946 }; // Example lat-long for Bangalore, India
-};
-
-// Define Zod schema for the request validation
-const userTripsSchema = z.object({
-  user_id: z.string().min(1, "user_id is required"), // user_id must be a non-empty string
-});
 app.get(
   "/api/user-trips",
-  authenticate,
+  dummyAuthenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const currentUser = req.currentUser;
       if (currentUser == null) {
         throw new Error("User not authenticated");
       }
-
       const { id } = currentUser;
-
       const trips = await getTripsByUserId(id);
       if (trips.length === 0) {
         res.status(404).json({ error: "No trips found for the given user." });
         return;
       }
-
       res.status(200).json(trips);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        // Handle Zod validation errors
         res.status(400).json({ error: error.errors });
       } else {
         console.error(`Error fetching trips:`, error);

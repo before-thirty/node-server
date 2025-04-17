@@ -1,11 +1,25 @@
 import { Request, Response, NextFunction } from "express";
 import { admin } from "../utils/firebase/firebase";
-import { getUserByFirebaseId } from "../helpers/dbHelpers";
+import { getUserByFirebaseId, getUserById } from "../helpers/dbHelpers";
 
 export interface AuthenticatedRequest extends Request {
   firebaseUser?: admin.auth.DecodedIdToken;
   appUser?: any;
 }
+
+export const dummyAuthenticate = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const user_id = req.headers["x-user-id"];
+  const user = await getUserById(user_id as string);
+  if (user == null) {
+    return res.status(401).json({ error: "Unauthorized: User not found" });
+  }
+  req.currentUser = user;
+  next();
+};
 
 export const authenticate = async (
   req: AuthenticatedRequest,

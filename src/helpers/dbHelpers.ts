@@ -74,7 +74,7 @@ export const createPin = async (pinDetails: {
   category: string;
   contentId: string;
   placeCacheId: string;
-  description:string;
+  description: string;
   coordinates: { lat: number; lng: number };
 }) => {
   return await prisma.pin.create({
@@ -83,7 +83,7 @@ export const createPin = async (pinDetails: {
       category: pinDetails.category ?? "Uncategorized",
       contentId: pinDetails.contentId,
       placeCacheId: pinDetails.placeCacheId,
-      description:pinDetails.description ?? "N/A"
+      description: pinDetails.description ?? "N/A",
     },
   });
 };
@@ -132,6 +132,12 @@ export const getUserByFirebaseId = async (
   return await prisma.user.findFirst({
     // TODO: change to findUnique once firebaseId is unique
     where: { firebaseId },
+  });
+};
+
+export const getUserById = async (userId: string) => {
+  return await prisma.user.findUnique({
+    where: { id: userId },
   });
 };
 
@@ -217,7 +223,10 @@ export const getTripById = async (tripId: string) => {
   });
 };
 
-export const getTripContentData = async (tripId: string,userLastLogin: Date | null) => {
+export const getTripContentData = async (
+  tripId: string,
+  userLastLogin: Date | null
+) => {
   // Fetch all content linked to the trip
   const contentList = await prisma.content.findMany({
     where: { tripId },
@@ -232,7 +241,7 @@ export const getTripContentData = async (tripId: string,userLastLogin: Date | nu
   });
 
   // Add isNew flag to content items
-  const contentListWithIsNew = contentList.map(content => ({
+  const contentListWithIsNew = contentList.map((content) => ({
     ...content,
     isNew: userLastLogin ? content.createdAt > userLastLogin : false,
   }));
@@ -254,7 +263,7 @@ export const getTripContentData = async (tripId: string,userLastLogin: Date | nu
   });
 
   // Add isNew flag to pin items
-  const pinsListWithIsNew = pinsList.map(pin => ({
+  const pinsListWithIsNew = pinsList.map((pin) => ({
     ...pin,
     isNew: userLastLogin ? pin.createdAt > userLastLogin : false,
   }));
@@ -270,10 +279,10 @@ export const getTripContentData = async (tripId: string,userLastLogin: Date | nu
     },
   });
 
-  return { 
-    contentList: contentListWithIsNew, 
-    pinsList: pinsListWithIsNew, 
-    placeCacheList 
+  return {
+    contentList: contentListWithIsNew,
+    pinsList: pinsListWithIsNew,
+    placeCacheList,
   };
 };
 
