@@ -74,6 +74,7 @@ export const createPin = async (pinDetails: {
   category: string;
   contentId: string;
   placeCacheId: string;
+  description:string;
   coordinates: { lat: number; lng: number };
 }) => {
   return await prisma.pin.create({
@@ -82,6 +83,7 @@ export const createPin = async (pinDetails: {
       category: pinDetails.category ?? "Uncategorized",
       contentId: pinDetails.contentId,
       placeCacheId: pinDetails.placeCacheId,
+      description:pinDetails.description ?? "N/A"
     },
   });
 };

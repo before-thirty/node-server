@@ -191,14 +191,16 @@ app.post(
 
           placeCacheId = placeCache.id;
 
-          // Step 5: Create Pin linked to PlaceCache
-          await createPin({
-            name: analysis.name ?? "",
-            category: analysis.classification ?? "",
-            contentId: newContent.id,
-            placeCacheId: placeCacheId,
-            coordinates: coordinates,
-          });
+                // Step 5: Create Pin linked to PlaceCache
+                const pin = await createPin({
+                    name: analysis.name ?? "",
+                    category: analysis.classification ?? "",
+                    contentId: newContent.id,
+                    placeCacheId: placeCacheId,
+                    coordinates: coordinates,
+                    description: analysis.additional_info ?? ""
+                });
+                req.logger?.info(`Created Pin - ${pin.id} with content_id - ${newContent.id} and place_id - ${placeCacheId}`)
 
           return {
             ...analysis,
