@@ -2,7 +2,6 @@ import * as admin from "firebase-admin";
 import { getApps, initializeApp, cert } from "firebase-admin/app";
 
 const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY || "";
-console.log("Is private key here", { privateKey });
 
 if (!getApps().length) {
   initializeApp({
