@@ -17,7 +17,7 @@ const openaiClient = new OpenAI({
 
 export interface CaptionAnalysisResponse {
   name: string | null;
-  addtional_info: string | null;
+  additional_info: string | null;
   location: string | null;
   classification:
     | "Attraction"

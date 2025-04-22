@@ -1,33 +1,47 @@
 // Importing required modules
-import express, { Request, Response } from 'express';
-import morgan from 'morgan';
-import bodyParser from 'body-parser';
-import dotenv from 'dotenv';
-import cors from 'cors';
-import { requestLogger } from "./middleware/logger"
-import {extractLocationAndClassify,extractLocationAndClassifyGemini} from "./helpers/openai"
+import express, { Request, Response, NextFunction } from "express";
+import morgan from "morgan";
+import bodyParser from "body-parser";
+import dotenv from "dotenv";
+import cors from "cors";
+import { requestLogger } from "./middleware/logger";
+import { extractLocationAndClassify } from "./helpers/openai";
 import parser from "html-metadata-parser";
-import { getPlaceId,getFullPlaceDetails,getCoordinatesFromPlaceId } from './helpers/googlemaps';
-import { z } from 'zod';
-import { createPlaceCache,getContentPinsPlaceNested,getTripContentData,getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin, addUserToTrip, getTripById, getUsersFromTrip, addMessage, getMessageById, getMessagesByTime, getUsername} from './helpers/dbHelpers'; // Import helper functions
+import {
+  getPlaceId,
+  getFullPlaceDetails,
+  getCoordinatesFromPlaceId,
+} from "./helpers/googlemaps";
+import { z } from "zod";
+import {
+  createPlaceCache,
+  getContentPinsPlaceNested,
+  getTripContentData,
+  getTripsByUserId,
+  createContent,
+  createUserTrip,
+  updateContent,
+  getPlaceCacheById,
+  createPin,
+  getTripById,
+  createUser,
+  getUserByFirebaseId,
+  createTripAndTripUser,
+  addUserToTrip,
+  getUsersFromTrip, addMessage, getMessageById, getMessagesByTime, getUsername
+} from "./helpers/dbHelpers"; // Import helper functions
+import { PrismaClient } from "@prisma/client";
+import { authenticate, dummyAuthenticate } from "./middleware/currentUser";
+import { getDummyStartAndEndDate } from "./utils/jsUtils";
 
-// Load environment variables from .env file
 dotenv.config();
 
-// Initialize the Express app
 const app = express();
+
 app.use(requestLogger);
-// Middleware setup
-app.use(cors()); // Enable Cross-Origin Resource Sharing
-app.use(bodyParser.json()); // Parse JSON bodies
-app.use(morgan("dev")); // HTTP request logger for development
-
-// Define directory structure for routes
-// const routes = require('./routes');
-// app.use('/api', routes);
-
-// Connect to MongoDB Atlas
-
+app.use(cors());
+app.use(bodyParser.json());
+app.use(morgan("dev"));
 
 const getMetadata = async (url: string) => {
   try {
@@ -39,29 +53,19 @@ const getMetadata = async (url: string) => {
   }
 };
 
-const TripSchema = z
-  .object({
-    id: z.string().uuid().optional(), // UUID
-    name: z.string().min(1, "Trip name is required"),
-    startDate: z.coerce.date().refine((data) => data >= new Date(), {
-      message: "Start date must be in the future",
-    }),
-    endDate: z.coerce.date().refine((data) => data >= new Date(), {
-      message: "End date must be in the future",
-    }),
-    description: z.string().optional(),
-  })
-  .refine((data) => data.endDate > data.startDate, {
-    message: "End date cannot be earlier than start date.",
-    path: ["endDate"],
-  });
+const UserSchema = z.object({
+  id: z.string().uuid().optional(), // UUID
+  name: z.string().min(1, "User name is required"),
+  email: z.string(),
+  phoneNumber: z.string(),
+  firebaseId: z.string(),
+});
 
-// Define the Zod schema for validation
 const ContentSchema = z.object({
-  url: z.string().url(), // URL must be a valid URL
-  content: z.string(), // Content should be a string
-  user_id: z.string().uuid(), // user_id should be a UUID string
-  trip_id: z.string().uuid(), // trip_id should be a UUID string
+  url: z.string().url(),
+  content: z.string(),
+  user_id: z.string().uuid(),
+  trip_id: z.string().uuid(),
 });
 
 const UserTripSchema = z.object({
@@ -69,7 +73,15 @@ const UserTripSchema = z.object({
   user_id: z.string().uuid(),
   trip_id: z.string().uuid(),
 });
-// Define primary route
+
+app.get("/api/status", async (req: Request, res: Response) => {
+  res.status(200).json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    userId: "67580046-2ff8-4e92-9eec-8263cf908616",
+  });
+});
+
 app.post(
   "/api/extract-lat-long",
   async (req: Request, res: Response): Promise<void> => {
@@ -161,7 +173,8 @@ app.post(
                     category: analysis.classification ?? "",
                     contentId: newContent.id,
                     placeCacheId: placeCacheId,
-                    coordinates: coordinates
+                    coordinates: coordinates,
+                    description: analysis.additional_info ?? ""
                 });
                 req.logger?.info(`Created Pin - ${pin.id} with content_id - ${newContent.id} and place_id - ${placeCacheId}`)
 
@@ -185,7 +198,6 @@ app.post(
       // Respond with the processed data
       res.status(200).json(responses);
     } catch (error) {
-      // Handle Zod validation error
       if (error instanceof z.ZodError) {
         res
           .status(400)
@@ -195,35 +207,27 @@ app.post(
         res.status(500).json({ error: "Internal server error." });
       }
     }
-});
+  }
+);
 
-
-
-
-// Define Zod schema for the request validation
-const userTripsSchema = z.object({
-  user_id: z.string().min(1, "user_id is required"), // user_id must be a non-empty string
-});
 app.get(
   "/api/user-trips",
+  dummyAuthenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      // Validate the incoming query using Zod schema
-      const { user_id } = userTripsSchema.parse(req.query);
-
-      // Call the helper function to get the trips by user ID
-      const trips = await getTripsByUserId(user_id);
-
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        throw new Error("User not authenticated");
+      }
+      const { id } = currentUser;
+      const trips = await getTripsByUserId(id);
       if (trips.length === 0) {
         res.status(404).json({ error: "No trips found for the given user." });
         return;
       }
-
-      // Send the trips as a list of dictionaries
       res.status(200).json(trips);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        // Handle Zod validation errors
         res.status(400).json({ error: error.errors });
       } else {
         console.error(`Error fetching trips:`, error);
@@ -240,19 +244,70 @@ app.get("/api/health", async (req: Request, res: Response) => {
   });
 });
 
+app.post("/api/users", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name, email, phoneNumber, firebaseId } = UserSchema.parse(req.body);
+    const newUser = await createUser(name, email, phoneNumber, firebaseId);
+    res.status(201).json(newUser);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: error.errors });
+    } else {
+      console.error(`Error creating trip:`, error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+});
+
+app.post("/api/signin-with-google", async (req, res) => {
+  const { firebaseId, name, email, phoneNumber } = UserSchema.parse(req.body);
+  const prisma = new PrismaClient();
+
+  try {
+    let user = await getUserByFirebaseId(firebaseId);
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          firebaseId,
+          name,
+          email,
+          phoneNumber,
+        },
+      });
+    }
+
+    const trips = await getTripsByUserId(user.id);
+    const currentTripId = trips[0]?.id;
+
+    res.status(200).json({ ...user, currentTripId });
+  } catch (error) {
+    console.error("Error in get-or-create-user:", error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});
+
 app.post(
   "/api/create-trip",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { name, startDate, endDate, description } = TripSchema.parse(
-        req.body
-      );
-      const newTrip = await createTrip(
+      const { name, description } = req.body;
+      const user = req.currentUser;
+      if (user == null) {
+        throw new Error("User not authenticated");
+      }
+      const { startDate, endDate } = getDummyStartAndEndDate();
+      console.log("WHy is log not working wtf");
+      console.log("what is start and end date", startDate, endDate);
+      const newTrip = await createTripAndTripUser(
+        user.id,
         name,
         startDate,
         endDate,
         description ?? ""
       );
+      console.log("Look at new trip", newTrip);
       res.status(201).json(newTrip);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -289,6 +344,13 @@ app.post(
 const tripIdSchema = z.object({
   tripId: z.string().uuid(),
 });
+// Query parameters schema
+const tripContentQuerySchema = z.object({
+  userLastLogin: z.string()
+    .regex(/^\d+$/, "Must be a valid Unix timestamp")
+    .transform(val => parseInt(val, 10))
+    .optional(), // Unix timestamp (seconds since epoch)
+});
 
 app.get(
   "/api/trip/:tripId/content",
@@ -297,9 +359,14 @@ app.get(
       // Validate request parameters
       const { tripId } = tripIdSchema.parse(req.params);
 
+      // Validate query parameters
+      const { userLastLogin } = tripContentQuerySchema.parse(req.query);
+
+      const lastLoginDate = userLastLogin ? new Date(userLastLogin * 1000) : null;
+
       // Fetch content, pins, and place cache separately
       const { contentList, pinsList, placeCacheList } =
-        await getTripContentData(tripId);
+        await getTripContentData(tripId,lastLoginDate);
       const trip = await getTripById(tripId);
 
       const nested = await getContentPinsPlaceNested(tripId);

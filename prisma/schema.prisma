@@ -15,6 +15,7 @@ model User {
   phoneNumber String     @unique
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+  firebaseId  String
   contents    Content[]
   Message     ChatMessage[]
   tripUsers   TripUser[]
@@ -75,16 +76,16 @@ model Pin {
 model PlaceCache {
   id                  String   @id @default(uuid())
   placeId             String   @unique
-  name                String?
-  rating              Float?
-  userRatingCount     Int?
-  websiteUri          String?
-  currentOpeningHours Json?
-  regularOpeningHours Json?
   lat                 Float
   lng                 Float
   createdAt           DateTime @default(now())
   lastCached          DateTime
+  currentOpeningHours Json?
+  name                String?
+  rating              Float?
+  regularOpeningHours Json?
+  userRatingCount     Int?
+  websiteUri          String?
   images              String[]
   pins                Pin[]
 }
