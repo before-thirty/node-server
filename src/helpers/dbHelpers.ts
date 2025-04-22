@@ -233,24 +233,29 @@ export const addUserToTrip = async (tripId: string, userId: string) => {
 export const getUsersFromTrip = async (tripId: string) => {
   const users = await prisma.trip.findUnique({
     where: { id: tripId },
-    include: { tripUsers: true },
+    include: { tripUsers: {
+      include : {
+        user: true
+      }
+    }},
   });
   // users is json object with tripUsers array
   if (users) {
-    return users.tripUsers.map((tripUser) => tripUser.userId);
+    return users.tripUsers.map((tripUser) => tripUser.user?.name);
   } else {
     return [];
   };
 }
 
-export const addMessage = async (tripId: string, userId: string, message: string, timestamp: Date) => {
+export const addMessage = async (tripId: string, userId: string, message: string, timestamp: Date, type: string) => {
   const newMessage = await prisma.chatMessage.create({
     data: {
       id : crypto.randomUUID(),
       tripId: tripId,
       userId: userId,
       text: message,
-      createdAt: timestamp
+      createdAt: timestamp,
+      type: type
     },
   });
   return newMessage;
@@ -282,4 +287,12 @@ export const getMessagesByTime = async (tripId: string, beforeDate: string, quer
     },
   });
   return messages;
+}
+
+export const getUsername = async (userId: any) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId as string },
+    select: { name: true },
+  });
+  return user;
 }

@@ -9,7 +9,7 @@ import {extractLocationAndClassify,extractLocationAndClassifyGemini} from "./hel
 import parser from "html-metadata-parser";
 import { getPlaceId,getFullPlaceDetails,getCoordinatesFromPlaceId } from './helpers/googlemaps';
 import { z } from 'zod';
-import { createPlaceCache,getContentPinsPlaceNested,getTripContentData,getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin, addUserToTrip, getTripById, getUsersFromTrip, addMessage, getMessageById, getMessagesByTime} from './helpers/dbHelpers'; // Import helper functions
+import { createPlaceCache,getContentPinsPlaceNested,getTripContentData,getTripsByUserId,createContent, createTrip, createUserTrip, updateContent, getPlaceCacheById, createPin, addUserToTrip, getTripById, getUsersFromTrip, addMessage, getMessageById, getMessagesByTime, getUsername} from './helpers/dbHelpers'; // Import helper functions
 
 // Load environment variables from .env file
 dotenv.config();
@@ -352,12 +352,14 @@ app.post(
   "/api/addMessage",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { tripId, userId, message, timestamp } = req.body;
+      const { tripId, userId, message, timestamp, type } = req.body;
+      console.log(req.body)
       await addMessage(
         tripId,
         userId,
         message,
-        timestamp);
+        timestamp,
+        type);
       res.status(200).json({ message: "Message received successfully." });
     } catch (error) {
       console.error("Error sending message:", error);
@@ -391,6 +393,44 @@ app.get(
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+
+app.get("/api/getUsername", async (req: Request, res: Response) => {
+  const { userId } = req.query;
+  console.log(userId)
+  if (!userId) {
+    return res.status(400).json({ error: "userId is required" });
+  }
+  try {
+    const user = await getUsername(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    console.log(user)
+    return res.status(200).json({ name: user.name });
+  } catch (error) {
+    console.error("Error fetching username:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get(
+  "/api/trip/:tripId",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      // Validate request parameters
+      const { tripId } = tripIdSchema.parse(req.params);
+      const trip = await getTripById(tripId);
+      res.status(200).json({
+        trip,
+      });
+    } catch (error) {
+      console.error("Error fetching trip:", error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+);
+
 
 // Start the server
 const PORT = process.env.PORT || 5000;
