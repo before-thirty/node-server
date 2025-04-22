@@ -296,8 +296,9 @@ app.get("/api/getUsersFromTrip", (req, res) => __awaiter(void 0, void 0, void 0,
 // api for sending message
 app.post("/api/addMessage", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { tripId, userId, message, timestamp } = req.body;
-        yield (0, dbHelpers_1.addMessage)(tripId, userId, message, timestamp);
+        const { tripId, userId, message, timestamp, type } = req.body;
+        console.log(req.body);
+        yield (0, dbHelpers_1.addMessage)(tripId, userId, message, timestamp, type);
         res.status(200).json({ message: "Message received successfully." });
     }
     catch (error) {
@@ -318,6 +319,7 @@ app.get("/api/getMessagesByTrip", (req, res) => __awaiter(void 0, void 0, void 0
             const beforeMessage = yield (0, dbHelpers_1.getMessageById)(tripId, before);
             if (!beforeMessage) {
                 res.status(400).json({ error: 'Invalid "before" message ID' });
+                return;
             }
             beforeDate = beforeMessage === null || beforeMessage === void 0 ? void 0 : beforeMessage.createdAt;
         }
@@ -327,6 +329,39 @@ app.get("/api/getMessagesByTrip", (req, res) => __awaiter(void 0, void 0, void 0
     catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Server error' });
+    }
+}));
+app.get("/api/getUsername", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { userId } = req.query;
+    console.log(userId);
+    if (!userId) {
+        return res.status(400).json({ error: "userId is required" });
+    }
+    try {
+        const user = yield (0, dbHelpers_1.getUsername)(userId);
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        console.log(user);
+        return res.status(200).json({ name: user.name });
+    }
+    catch (error) {
+        console.error("Error fetching username:", error);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+}));
+app.get("/api/trip/:tripId", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        // Validate request parameters
+        const { tripId } = tripIdSchema.parse(req.params);
+        const trip = yield (0, dbHelpers_1.getTripById)(tripId);
+        res.status(200).json({
+            trip,
+        });
+    }
+    catch (error) {
+        console.error("Error fetching trip:", error);
+        res.status(500).json({ error: "Internal server error." });
     }
 }));
 // Start the server

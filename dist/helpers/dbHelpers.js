@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMessagesByTime = exports.getMessageById = exports.addMessage = exports.getUsersFromTrip = exports.addUserToTrip = exports.getContentPinsPlaceNested = exports.getTripContentData = exports.getTripById = exports.createUserTrip = exports.createTrip = exports.getTripsByUserId = exports.createPin = exports.createPlaceCache = exports.getPlaceCacheById = exports.updateContent = exports.createContent = void 0;
+exports.getUsername = exports.getMessagesByTime = exports.getMessageById = exports.addMessage = exports.getUsersFromTrip = exports.addUserToTrip = exports.getContentPinsPlaceNested = exports.getTripContentData = exports.getTripById = exports.createUserTrip = exports.createTrip = exports.getTripsByUserId = exports.createPin = exports.createPlaceCache = exports.getPlaceCacheById = exports.updateContent = exports.createContent = void 0;
 const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
 // Create a new Content entry
@@ -206,11 +206,15 @@ exports.addUserToTrip = addUserToTrip;
 const getUsersFromTrip = (tripId) => __awaiter(void 0, void 0, void 0, function* () {
     const users = yield prisma.trip.findUnique({
         where: { id: tripId },
-        include: { tripUsers: true },
+        include: { tripUsers: {
+                include: {
+                    user: true
+                }
+            } },
     });
     // users is json object with tripUsers array
     if (users) {
-        return users.tripUsers.map((tripUser) => tripUser.userId);
+        return users.tripUsers.map((tripUser) => { var _a; return (_a = tripUser.user) === null || _a === void 0 ? void 0 : _a.name; });
     }
     else {
         return [];
@@ -218,14 +222,15 @@ const getUsersFromTrip = (tripId) => __awaiter(void 0, void 0, void 0, function*
     ;
 });
 exports.getUsersFromTrip = getUsersFromTrip;
-const addMessage = (tripId, userId, message, timestamp) => __awaiter(void 0, void 0, void 0, function* () {
+const addMessage = (tripId, userId, message, timestamp, type) => __awaiter(void 0, void 0, void 0, function* () {
     const newMessage = yield prisma.chatMessage.create({
         data: {
             id: crypto.randomUUID(),
             tripId: tripId,
             userId: userId,
             text: message,
-            createdAt: timestamp
+            createdAt: timestamp,
+            type: type
         },
     });
     return newMessage;
@@ -256,3 +261,11 @@ const getMessagesByTime = (tripId, beforeDate, queryLimit) => __awaiter(void 0, 
     return messages;
 });
 exports.getMessagesByTime = getMessagesByTime;
+const getUsername = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    const user = yield prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+    });
+    return user;
+});
+exports.getUsername = getUsername;
