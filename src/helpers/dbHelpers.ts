@@ -7,19 +7,20 @@ export const createContent = async (
   url: string,
   description: string,
   userId: string,
-  tripId: string
+  tripId: string,
+  userNotes?: string
 ) => {
   return await prisma.content.create({
     data: {
       url: url,
-      rawData: description, // Store raw description data
-      structuredData: "", // Initially empty, will update later
+      rawData: description,
+      structuredData: "",
       userId: userId,
       tripId: tripId,
+      userNotes: userNotes
     },
   });
 };
-
 // Update an existing Content entry with structured data
 export const updateContent = async (contentId: string, structuredData: any) => {
   return await prisma.content.update({

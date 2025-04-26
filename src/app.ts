@@ -61,9 +61,10 @@ const UserSchema = z.object({
 
 const ContentSchema = z.object({
   url: z.string().url(),
-  content: z.string(),
+  content: z.string().optional(),
   user_id: z.string().uuid(),
   trip_id: z.string().uuid(),
+  user_notes: z.string().optional()
 });
 
 const UserTripSchema = z.object({
@@ -86,7 +87,7 @@ app.post(
     try {
       // Validate the request body using Zod
       const validatedData = ContentSchema.parse(req.body);
-      const { url, content, user_id, trip_id } = validatedData;
+      const { url, content, user_id, trip_id, user_notes } = validatedData;
 
       req.logger?.info(
         `Request received: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`
@@ -112,7 +113,8 @@ app.post(
         url,
         description,
         user_id,
-        trip_id
+        trip_id,
+        user_notes
       );
 
       // Extract structured data using AI
