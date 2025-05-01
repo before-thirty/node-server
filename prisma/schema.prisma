@@ -17,6 +17,7 @@ model User {
   updatedAt   DateTime   @updatedAt
   firebaseId  String
   contents    Content[]
+  Message     ChatMessage[]
   tripUsers   TripUser[]
 }
 
@@ -29,6 +30,7 @@ model Trip {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   contents    Content[]
+  Message     ChatMessage[]
   tripUsers   TripUser[]
 }
 
@@ -87,4 +89,17 @@ model PlaceCache {
   websiteUri          String?
   images              String[]
   pins                Pin[]
+}
+
+model ChatMessage {
+  id        String   @id
+  userId    String
+  text      String
+  createdAt DateTime @default(now())
+  type      String   @default("text")
+  fileUrl   String?
+  fileName  String?
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
 }
