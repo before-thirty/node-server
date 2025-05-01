@@ -12,7 +12,7 @@ model User {
   id          String     @id @default(uuid())
   name        String
   email       String     @unique
-  phoneNumber String     @unique
+  phoneNumber String
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   firebaseId  String
@@ -51,7 +51,7 @@ model Content {
   structuredData String
   userId         String
   tripId         String
-  userNotes      String?
+  userNotes String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   trip           Trip     @relation(fields: [tripId], references: [id])

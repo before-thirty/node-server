@@ -6,6 +6,7 @@ CREATE TABLE "User" (
     "phoneNumber" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "firebaseId" TEXT NOT NULL,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
@@ -52,7 +53,6 @@ CREATE TABLE "Content" (
 CREATE TABLE "Pin" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "location" JSONB NOT NULL,
     "category" TEXT NOT NULL,
     "description" TEXT,
     "contentId" TEXT NOT NULL,
@@ -71,6 +71,13 @@ CREATE TABLE "PlaceCache" (
     "lng" DOUBLE PRECISION NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "lastCached" TIMESTAMP(3) NOT NULL,
+    "currentOpeningHours" JSONB,
+    "name" TEXT,
+    "rating" DOUBLE PRECISION,
+    "regularOpeningHours" JSONB,
+    "userRatingCount" INTEGER,
+    "websiteUri" TEXT,
+    "images" TEXT[],
 
     CONSTRAINT "PlaceCache_pkey" PRIMARY KEY ("id")
 );
@@ -94,10 +101,10 @@ ALTER TABLE "TripUser" ADD CONSTRAINT "TripUser_tripId_fkey" FOREIGN KEY ("tripI
 ALTER TABLE "TripUser" ADD CONSTRAINT "TripUser_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Content" ADD CONSTRAINT "Content_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Content" ADD CONSTRAINT "Content_tripId_fkey" FOREIGN KEY ("tripId") REFERENCES "Trip"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Content" ADD CONSTRAINT "Content_tripId_fkey" FOREIGN KEY ("tripId") REFERENCES "Trip"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Content" ADD CONSTRAINT "Content_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Pin" ADD CONSTRAINT "Pin_contentId_fkey" FOREIGN KEY ("contentId") REFERENCES "Content"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
