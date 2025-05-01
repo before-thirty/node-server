@@ -7,19 +7,20 @@ export const createContent = async (
   url: string,
   description: string,
   userId: string,
-  tripId: string
+  tripId: string,
+  userNotes?: string
 ) => {
   return await prisma.content.create({
     data: {
       url: url,
-      rawData: description, // Store raw description data
-      structuredData: "", // Initially empty, will update later
+      rawData: description,
+      structuredData: "",
       userId: userId,
       tripId: tripId,
+      userNotes: userNotes
     },
   });
 };
-
 // Update an existing Content entry with structured data
 export const updateContent = async (contentId: string, structuredData: any) => {
   return await prisma.content.update({
@@ -42,30 +43,32 @@ export const getPlaceCacheById = async (placeId: string) => {
 
 // Function to create a new PlaceCache entry with full details
 export const createPlaceCache = async (placeDetails: {
-  placeId: string;
-  name: string;
-  rating: number | null;
-  userRatingCount: number | null;
-  websiteUri: string | null;
-  currentOpeningHours: any | null;
-  regularOpeningHours: any | null;
-  lat: number;
-  lng: number;
+    placeId: string;
+    name: string;
+    rating: number | null;
+    userRatingCount: number | null;
+    websiteUri: string | null;
+    currentOpeningHours: any | null;
+    regularOpeningHours: any | null;
+    lat: number;
+    lng: number;
+    images: string[];
 }) => {
-  return await prisma.placeCache.create({
-    data: {
-      placeId: placeDetails.placeId,
-      name: placeDetails.name,
-      rating: placeDetails.rating,
-      userRatingCount: placeDetails.userRatingCount,
-      websiteUri: placeDetails.websiteUri,
-      currentOpeningHours: placeDetails.currentOpeningHours,
-      regularOpeningHours: placeDetails.regularOpeningHours,
-      lat: placeDetails.lat,
-      lng: placeDetails.lng,
-      lastCached: new Date(),
-    },
-  });
+    return await prisma.placeCache.create({
+        data: {
+            placeId: placeDetails.placeId,
+            name: placeDetails.name,
+            rating: placeDetails.rating,
+            userRatingCount: placeDetails.userRatingCount,
+            websiteUri: placeDetails.websiteUri,
+            currentOpeningHours: placeDetails.currentOpeningHours,
+            regularOpeningHours: placeDetails.regularOpeningHours,
+            lat: placeDetails.lat,
+            lng: placeDetails.lng,
+            lastCached: new Date(),
+            images: placeDetails.images
+        },
+    });
 };
 
 // Create a new Pin linked to the Content and PlaceCache
@@ -209,7 +212,7 @@ export const createUserTrip = async (
 ) => {
   return await prisma.tripUser.create({
     data: {
-      role: role ?? "",
+      role: role ?? "Member",
       userId: userId,
       tripId: tripId,
     },
@@ -304,3 +307,84 @@ export const getContentPinsPlaceNested = async (tripId: string) => {
   });
   return nestedTrip;
 };
+
+export const addUserToTrip = async (tripId: string, userId: string) => {
+  const tripUser = await prisma.tripUser.create({
+    data: {
+      userId: userId,
+      tripId: tripId,
+      role: "Admin", 
+    },
+  });
+
+  // need to add socket.io code here
+  
+  return tripUser;
+}
+
+export const getUsersFromTrip = async (tripId: string) => {
+  const users = await prisma.trip.findUnique({
+    where: { id: tripId },
+    include: { tripUsers: {
+      include : {
+        user: true
+      }
+    }},
+  });
+  // users is json object with tripUsers array
+  if (users) {
+    return users.tripUsers.map((tripUser) => tripUser.user?.name);
+  } else {
+    return [];
+  };
+}
+
+export const addMessage = async (tripId: string, userId: string, message: string, timestamp: Date, type: string) => {
+  const newMessage = await prisma.chatMessage.create({
+    data: {
+      id : crypto.randomUUID(),
+      tripId: tripId,
+      userId: userId,
+      text: message,
+      createdAt: timestamp,
+      type: type
+    },
+  });
+  return newMessage;
+}
+
+export const getMessageById = async (tripId: string, messageId: string) => {
+  const response = await prisma.chatMessage.findUnique({
+    where: { id: messageId as string },
+    select: { createdAt: true },
+  });
+  return response;
+}
+
+export const getMessagesByTime = async (tripId: string, beforeDate: string, queryLimit: number) => {
+  const messages = await prisma.chatMessage.findMany({
+    where: {
+      tripId: tripId as string,
+      ...(beforeDate && { createdAt: { lt: beforeDate } }),
+    },
+    orderBy: { createdAt: 'desc' },
+    take: queryLimit,
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  });
+  return messages;
+}
+
+export const getUsername = async (userId: any) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId as string },
+    select: { name: true },
+  });
+  return user;
+}

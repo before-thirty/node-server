@@ -12,11 +12,12 @@ model User {
   id          String     @id @default(uuid())
   name        String
   email       String     @unique
-  phoneNumber String     @unique
+  phoneNumber String
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   firebaseId  String
   contents    Content[]
+  Message     ChatMessage[]
   tripUsers   TripUser[]
 }
 
@@ -29,6 +30,7 @@ model Trip {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   contents    Content[]
+  Message     ChatMessage[]
   tripUsers   TripUser[]
 }
 
@@ -51,6 +53,7 @@ model Content {
   structuredData String
   userId         String
   tripId         String
+  userNotes String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   trip           Trip     @relation(fields: [tripId], references: [id])
@@ -86,4 +89,17 @@ model PlaceCache {
   websiteUri          String?
   images              String[]
   pins                Pin[]
+}
+
+model ChatMessage {
+  id        String   @id
+  userId    String
+  text      String
+  createdAt DateTime @default(now())
+  type      String   @default("text")
+  fileUrl   String?
+  fileName  String?
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
 }
