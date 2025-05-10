@@ -17,7 +17,7 @@ export const createContent = async (
       structuredData: "",
       userId: userId,
       tripId: tripId,
-      userNotes: userNotes
+      userNotes: userNotes,
     },
   });
 };
@@ -43,32 +43,32 @@ export const getPlaceCacheById = async (placeId: string) => {
 
 // Function to create a new PlaceCache entry with full details
 export const createPlaceCache = async (placeDetails: {
-    placeId: string;
-    name: string;
-    rating: number | null;
-    userRatingCount: number | null;
-    websiteUri: string | null;
-    currentOpeningHours: any | null;
-    regularOpeningHours: any | null;
-    lat: number;
-    lng: number;
-    images: string[];
+  placeId: string;
+  name: string;
+  rating: number | null;
+  userRatingCount: number | null;
+  websiteUri: string | null;
+  currentOpeningHours: any | null;
+  regularOpeningHours: any | null;
+  lat: number;
+  lng: number;
+  images: string[];
 }) => {
-    return await prisma.placeCache.create({
-        data: {
-            placeId: placeDetails.placeId,
-            name: placeDetails.name,
-            rating: placeDetails.rating,
-            userRatingCount: placeDetails.userRatingCount,
-            websiteUri: placeDetails.websiteUri,
-            currentOpeningHours: placeDetails.currentOpeningHours,
-            regularOpeningHours: placeDetails.regularOpeningHours,
-            lat: placeDetails.lat,
-            lng: placeDetails.lng,
-            lastCached: new Date(),
-            images: placeDetails.images
-        },
-    });
+  return await prisma.placeCache.create({
+    data: {
+      placeId: placeDetails.placeId,
+      name: placeDetails.name,
+      rating: placeDetails.rating,
+      userRatingCount: placeDetails.userRatingCount,
+      websiteUri: placeDetails.websiteUri,
+      currentOpeningHours: placeDetails.currentOpeningHours,
+      regularOpeningHours: placeDetails.regularOpeningHours,
+      lat: placeDetails.lat,
+      lng: placeDetails.lng,
+      lastCached: new Date(),
+      images: placeDetails.images,
+    },
+  });
 };
 
 // Create a new Pin linked to the Content and PlaceCache
@@ -239,6 +239,7 @@ export const getTripContentData = async (
       structuredData: true,
       userId: true,
       tripId: true,
+      userNotes: true,
       createdAt: true, // Added to check against last login
     },
   });
@@ -313,45 +314,53 @@ export const addUserToTrip = async (tripId: string, userId: string) => {
     data: {
       userId: userId,
       tripId: tripId,
-      role: "Admin", 
+      role: "Admin",
     },
   });
 
   // need to add socket.io code here
-  
+
   return tripUser;
-}
+};
 
 export const getUsersFromTrip = async (tripId: string) => {
   const users = await prisma.trip.findUnique({
     where: { id: tripId },
-    include: { tripUsers: {
-      include : {
-        user: true
-      }
-    }},
+    include: {
+      tripUsers: {
+        include: {
+          user: true,
+        },
+      },
+    },
   });
   // users is json object with tripUsers array
   if (users) {
     return users.tripUsers.map((tripUser) => tripUser.user?.name);
   } else {
     return [];
-  };
-}
+  }
+};
 
-export const addMessage = async (tripId: string, userId: string, message: string, timestamp: Date, type: string) => {
+export const addMessage = async (
+  tripId: string,
+  userId: string,
+  message: string,
+  timestamp: Date,
+  type: string
+) => {
   const newMessage = await prisma.chatMessage.create({
     data: {
-      id : crypto.randomUUID(),
+      id: crypto.randomUUID(),
       tripId: tripId,
       userId: userId,
       text: message,
       createdAt: timestamp,
-      type: type
+      type: type,
     },
   });
   return newMessage;
-}
+};
 
 export const getMessageById = async (tripId: string, messageId: string) => {
   const response = await prisma.chatMessage.findUnique({
@@ -359,15 +368,19 @@ export const getMessageById = async (tripId: string, messageId: string) => {
     select: { createdAt: true },
   });
   return response;
-}
+};
 
-export const getMessagesByTime = async (tripId: string, beforeDate: string, queryLimit: number) => {
+export const getMessagesByTime = async (
+  tripId: string,
+  beforeDate: string,
+  queryLimit: number
+) => {
   const messages = await prisma.chatMessage.findMany({
     where: {
       tripId: tripId as string,
       ...(beforeDate && { createdAt: { lt: beforeDate } }),
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
     take: queryLimit,
     include: {
       user: {
@@ -379,7 +392,7 @@ export const getMessagesByTime = async (tripId: string, beforeDate: string, quer
     },
   });
   return messages;
-}
+};
 
 export const getUsername = async (userId: any) => {
   const user = await prisma.user.findUnique({
@@ -387,4 +400,4 @@ export const getUsername = async (userId: any) => {
     select: { name: true },
   });
   return user;
-}
+};

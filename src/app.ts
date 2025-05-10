@@ -28,7 +28,11 @@ import {
   getUserByFirebaseId,
   createTripAndTripUser,
   addUserToTrip,
-  getUsersFromTrip, addMessage, getMessageById, getMessagesByTime, getUsername
+  getUsersFromTrip,
+  addMessage,
+  getMessageById,
+  getMessagesByTime,
+  getUsername,
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
 import { authenticate, dummyAuthenticate } from "./middleware/currentUser";
@@ -66,7 +70,7 @@ const ContentSchema = z.object({
   content: z.string().optional(),
   user_id: z.string().uuid(),
   trip_id: z.string().uuid(),
-  user_notes: z.string().optional()
+  user_notes: z.string().optional(),
 });
 
 const UserTripSchema = z.object({
@@ -97,18 +101,22 @@ app.post(
 
       let description = content ?? "";
 
-        // If content is empty, fetch metadata from the URL
-        if (!content || content.trim() === "") {
-            req.logger?.debug(`The request doesnt contains content fetching metadata from URL`)
-            const metadata = await getMetadata(url);
-            description = metadata?.meta.description ?? "";
-        }
+      // If content is empty, fetch metadata from the URL
+      if (!content || content.trim() === "") {
+        req.logger?.debug(
+          `The request doesnt contains content fetching metadata from URL`
+        );
+        const metadata = await getMetadata(url);
+        description = metadata?.meta.description ?? "";
+      }
 
-        if (!description) {
-            req.logger?.error(`Failed to fetch metadata for URL - ${url}`)
-            res.status(404).json({ error: "Could not fetch metadata for the given URL" });
-            return;
-        }
+      if (!description) {
+        req.logger?.error(`Failed to fetch metadata for URL - ${url}`);
+        res
+          .status(404)
+          .json({ error: "Could not fetch metadata for the given URL" });
+        return;
+      }
 
       // Create a DB entry for content
       const newContent = await createContent(
@@ -119,20 +127,23 @@ app.post(
         user_notes
       );
 
-        // Extract structured data using AI
-        const analysis = await extractLocationAndClassify(description ?? "",req);
+      // Extract structured data using AI
+      const analysis = await extractLocationAndClassify(description ?? "", req);
 
-        // Update the Content entry with structured data
-        await updateContent(newContent.id, analysis);
-        req.logger?.debug(`Updated content entry with structured data ${newContent.id}`)
+      // Update the Content entry with structured data
+      await updateContent(newContent.id, analysis);
+      req.logger?.debug(
+        `Updated content entry with structured data ${newContent.id}`
+      );
 
-        // Process each analysis object in the list
-        const responses = await Promise.all(
-            analysis.map(async (analysis) => {
-                const full_loc = (analysis.name ?? "") + " " + (analysis.location ?? "");
-                
-                // Step 1: Get Place ID
-                const placeId = await getPlaceId(full_loc,req);
+      // Process each analysis object in the list
+      const responses = await Promise.all(
+        analysis.map(async (analysis) => {
+          const full_loc =
+            (analysis.name ?? "") + " " + (analysis.location ?? "");
+
+          // Step 1: Get Place ID
+          const placeId = await getPlaceId(full_loc, req);
 
           let coordinates;
           let placeCacheId;
@@ -140,66 +151,76 @@ app.post(
           // Step 2: Check if the place exists in the cache
           let placeCache = await getPlaceCacheById(placeId);
 
-                if (!placeCache) {
-                    req.logger?.debug("Could not find place in place Cache.. getting full place details")
-                    // Step 3: If not in cache, fetch full place details
-                    const placeDetails = await getFullPlaceDetails(full_loc,req);
+          if (!placeCache) {
+            req.logger?.debug(
+              "Could not find place in place Cache.. getting full place details"
+            );
+            // Step 3: If not in cache, fetch full place details
+            const placeDetails = await getFullPlaceDetails(full_loc, req);
 
-                    req.logger?.debug(`Place details for placeID - ${placeId} is - ${placeDetails}`)                    
+            req.logger?.debug(
+              `Place details for placeID - ${placeId} is - ${placeDetails}`
+            );
 
-                    coordinates = await getCoordinatesFromPlaceId(placeId,req);
+            coordinates = await getCoordinatesFromPlaceId(placeId, req);
 
-                    req.logger?.debug(`Coordinates for placeID - ${placeId} is - ${coordinates}`)  
+            req.logger?.debug(
+              `Coordinates for placeID - ${placeId} is - ${coordinates}`
+            );
 
-                    // Step 4: Store in cache
-                    placeCache = await createPlaceCache({
-                        placeId: placeDetails.id,
-                        name: placeDetails.name,
-                        rating: placeDetails.rating ?? null,
-                        userRatingCount: placeDetails.userRatingCount ?? null,
-                        websiteUri: placeDetails.websiteUri ?? null,
-                        currentOpeningHours: placeDetails.currentOpeningHours,
-                        regularOpeningHours: placeDetails.regularOpeningHours,
-                        lat: coordinates.lat,
-                        lng: coordinates.lng,
-                        images: placeDetails.images ?? []
-                    });
+            // Step 4: Store in cache
+            placeCache = await createPlaceCache({
+              placeId: placeDetails.id,
+              name: placeDetails.name,
+              rating: placeDetails.rating ?? null,
+              userRatingCount: placeDetails.userRatingCount ?? null,
+              websiteUri: placeDetails.websiteUri ?? null,
+              currentOpeningHours: placeDetails.currentOpeningHours,
+              regularOpeningHours: placeDetails.regularOpeningHours,
+              lat: coordinates.lat,
+              lng: coordinates.lng,
+              images: placeDetails.images ?? [],
+            });
 
-                    req.logger?.debug(`Created new entry in place cache ${placeCache.id} for placeID ${placeId}`)
-                } else {
-                    req.logger?.debug(`Found place id - ${placeId} in place cache`)
-                    coordinates = { lat: placeCache.lat, lng: placeCache.lng };
-                }
+            req.logger?.debug(
+              `Created new entry in place cache ${placeCache.id} for placeID ${placeId}`
+            );
+          } else {
+            req.logger?.debug(`Found place id - ${placeId} in place cache`);
+            coordinates = { lat: placeCache.lat, lng: placeCache.lng };
+          }
 
           placeCacheId = placeCache.id;
 
-                // Step 5: Create Pin linked to PlaceCache
-                const pin = await createPin({
-                    name: analysis.name ?? "",
-                    category: analysis.classification ?? "",
-                    contentId: newContent.id,
-                    placeCacheId: placeCacheId,
-                    coordinates: coordinates,
-                    description: analysis.additional_info ?? ""
-                });
-                req.logger?.info(`Created Pin - ${pin.id} with content_id - ${newContent.id} and place_id - ${placeCacheId}`)
+          // Step 5: Create Pin linked to PlaceCache
+          const pin = await createPin({
+            name: analysis.name ?? "",
+            category: analysis.classification ?? "",
+            contentId: newContent.id,
+            placeCacheId: placeCacheId,
+            coordinates: coordinates,
+            description: analysis.additional_info ?? "",
+          });
+          req.logger?.info(
+            `Created Pin - ${pin.id} with content_id - ${newContent.id} and place_id - ${placeCacheId}`
+          );
 
-                return {
-                    ...analysis,
-                    placeCacheId,
-                    coordinates,
-                    placeDetails: {
-                        name: placeCache.name,
-                        rating: placeCache.rating,
-                        userRatingCount: placeCache.userRatingCount,
-                        websiteUri: placeCache.websiteUri,
-                        currentOpeningHours: placeCache.currentOpeningHours,
-                        regularOpeningHours: placeCache.regularOpeningHours,
-                        images:placeCache.images
-                    }
-                };
-            })
-        );
+          return {
+            ...analysis,
+            placeCacheId,
+            coordinates,
+            placeDetails: {
+              name: placeCache.name,
+              rating: placeCache.rating,
+              userRatingCount: placeCache.userRatingCount,
+              websiteUri: placeCache.websiteUri,
+              currentOpeningHours: placeCache.currentOpeningHours,
+              regularOpeningHours: placeCache.regularOpeningHours,
+              images: placeCache.images,
+            },
+          };
+        })
+      );
 
       // Respond with the processed data
       res.status(200).json(responses);
@@ -295,7 +316,7 @@ app.post("/api/signin-with-google", async (req, res) => {
 
 app.post(
   "/api/create-trip",
-  authenticate,
+  dummyAuthenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { name, description } = req.body;
@@ -304,8 +325,6 @@ app.post(
         throw new Error("User not authenticated");
       }
       const { startDate, endDate } = getDummyStartAndEndDate();
-      console.log("WHy is log not working wtf");
-      console.log("what is start and end date", startDate, endDate);
       const newTrip = await createTripAndTripUser(
         user.id,
         name,
@@ -352,9 +371,10 @@ const tripIdSchema = z.object({
 });
 // Query parameters schema
 const tripContentQuerySchema = z.object({
-  userLastLogin: z.string()
+  userLastLogin: z
+    .string()
     .regex(/^\d+$/, "Must be a valid Unix timestamp")
-    .transform(val => parseInt(val, 10))
+    .transform((val) => parseInt(val, 10))
     .optional(), // Unix timestamp (seconds since epoch)
 });
 
@@ -368,11 +388,13 @@ app.get(
       // Validate query parameters
       const { userLastLogin } = tripContentQuerySchema.parse(req.query);
 
-      const lastLoginDate = userLastLogin ? new Date(userLastLogin * 1000) : null;
+      const lastLoginDate = userLastLogin
+        ? new Date(userLastLogin * 1000)
+        : null;
 
       // Fetch content, pins, and place cache separately
       const { contentList, pinsList, placeCacheList } =
-        await getTripContentData(tripId,lastLoginDate);
+        await getTripContentData(tripId, lastLoginDate);
       const trip = await getTripById(tripId);
 
       const nested = await getContentPinsPlaceNested(tripId);
@@ -402,7 +424,8 @@ app.post(
       res.status(201).json({ message: "User added to trip successfully." });
     } catch (error) {
       console.error("Error adding user to trip:", error);
-      res.status(500).json({ error: "Internal server error." });  }
+      res.status(500).json({ error: "Internal server error." });
+    }
   }
 );
 
@@ -418,21 +441,16 @@ app.get(
       res.status(500).json({ error: "Internal server error." });
     }
   }
-)
-    
+);
+
 // api for sending message
 app.post(
   "/api/addMessage",
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { tripId, userId, message, timestamp, type } = req.body;
-      console.log(req.body)
-      await addMessage(
-        tripId,
-        userId,
-        message,
-        timestamp,
-        type);
+      console.log(req.body);
+      await addMessage(tripId, userId, message, timestamp, type);
       res.status(200).json({ message: "Message received successfully." });
     } catch (error) {
       console.error("Error sending message:", error);
@@ -444,33 +462,40 @@ app.get(
   "/api/getMessagesByTrip",
   async (req: Request, res: Response): Promise<void> => {
     try {
-    const { tripId, before, limit = 20 } = req.query;
-    if (!tripId) {
-      res.status(400).json({ error: 'tripId is required' });
-      return
-    }
-    const queryLimit = parseInt(limit as string, 10);
-    let beforeDate: Date | undefined = undefined;
-    if (before) {
-      const beforeMessage = await getMessageById(tripId as string, before as string);
-      if (!beforeMessage) {
-        res.status(400).json({ error: 'Invalid "before" message ID' });
-        return
+      const { tripId, before, limit = 20 } = req.query;
+      if (!tripId) {
+        res.status(400).json({ error: "tripId is required" });
+        return;
       }
-      beforeDate = beforeMessage?.createdAt;
+      const queryLimit = parseInt(limit as string, 10);
+      let beforeDate: Date | undefined = undefined;
+      if (before) {
+        const beforeMessage = await getMessageById(
+          tripId as string,
+          before as string
+        );
+        if (!beforeMessage) {
+          res.status(400).json({ error: 'Invalid "before" message ID' });
+          return;
+        }
+        beforeDate = beforeMessage?.createdAt;
+      }
+      const messages = await getMessagesByTime(
+        tripId as string,
+        beforeDate as any,
+        queryLimit as number
+      );
+      res.json(messages);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Server error" });
     }
-    const messages = await getMessagesByTime(tripId as string, beforeDate as any, queryLimit as number)
-    res.json(messages);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
   }
-});
-
+);
 
 app.get("/api/getUsername", async (req: Request, res: Response) => {
   const { userId } = req.query;
-  console.log(userId)
+  console.log(userId);
   if (!userId) {
     return res.status(400).json({ error: "userId is required" });
   }
@@ -479,7 +504,7 @@ app.get("/api/getUsername", async (req: Request, res: Response) => {
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
-    console.log(user)
+    console.log(user);
     return res.status(200).json({ name: user.name });
   } catch (error) {
     console.error("Error fetching username:", error);
@@ -503,7 +528,6 @@ app.get(
     }
   }
 );
-
 
 // Start the server
 const PORT = process.env.PORT || 5000;
