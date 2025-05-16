@@ -401,3 +401,10 @@ export const getUsername = async (userId: any) => {
   });
   return user;
 };
+
+export const getUsersByIds = async (userIds: string[]) => {
+  if (!userIds || userIds.length === 0) return [];
+  return await prisma.user.findMany({
+    where: { id: { in: userIds } },
+  });
+};

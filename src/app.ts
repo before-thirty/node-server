@@ -33,6 +33,7 @@ import {
   getMessageById,
   getMessagesByTime,
   getUsername,
+  getUsersByIds,
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
 import { authenticate, dummyAuthenticate } from "./middleware/currentUser";
@@ -396,16 +397,23 @@ app.get(
       const { contentList, pinsList, placeCacheList } =
         await getTripContentData(tripId, lastLoginDate);
       const trip = await getTripById(tripId);
-
       const nested = await getContentPinsPlaceNested(tripId);
 
-      // Return as three separate arrays
+      const userIds = [
+        ...new Set(
+          contentList.map((content) => content.userId).filter(Boolean)
+        ),
+      ];
+
+      const users = userIds.length > 0 ? await getUsersByIds(userIds) : [];
+
       res.status(200).json({
         contents: contentList,
         pins: pinsList,
         placeCaches: placeCacheList,
         nestedData: nested,
         trip,
+        users, // TODO: DONT EXPOSE USERS NUMBER AND EMAIL HERE - NEEDS FRONTEND CHANGE TO SO DO LATER
       });
     } catch (error) {
       console.error("Error fetching trip data:", error);
