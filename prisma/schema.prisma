@@ -9,29 +9,31 @@ datasource db {
 }
 
 model User {
-  id          String     @id @default(uuid())
+  id          String        @id @default(uuid())
   name        String
-  email       String     @unique
+  email       String        @unique
   phoneNumber String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   firebaseId  String
   contents    Content[]
   Message     ChatMessage[]
   tripUsers   TripUser[]
+  ShareToken  ShareToken[]
 }
 
 model Trip {
-  id          String     @id @default(uuid())
+  id          String        @id @default(uuid())
   name        String
   startDate   DateTime
   endDate     DateTime
   description String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   contents    Content[]
   Message     ChatMessage[]
   tripUsers   TripUser[]
+  ShareToken  ShareToken[]
 }
 
 model TripUser {
@@ -53,7 +55,7 @@ model Content {
   structuredData String
   userId         String
   tripId         String
-  userNotes String?
+  userNotes      String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   trip           Trip     @relation(fields: [tripId], references: [id])
@@ -102,4 +104,15 @@ model ChatMessage {
   tripId    String
   trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id])
+}
+
+model ShareToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  tripId    String
+  createdBy String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [createdBy], references: [id])
 }
