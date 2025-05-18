@@ -240,7 +240,35 @@ app.post(
 
 app.get(
   "/api/user-trips",
-  dummyAuthenticate,
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        throw new Error("User not authenticated");
+      }
+      const { id } = currentUser;
+      const trips = await getTripsByUserId(id);
+      if (trips.length === 0) {
+        res.status(404).json({ error: "No trips found for the given user." });
+        return;
+      }
+      res.status(200).json(trips);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        console.error(`Error fetching trips:`, error);
+        res.status(500).json({ error: "Internal server error." });
+      }
+    }
+  }
+);
+
+
+app.post(
+  "/api/user-trips",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const currentUser = req.currentUser;
@@ -317,7 +345,7 @@ app.post("/api/signin-with-google", async (req, res) => {
 
 app.post(
   "/api/create-trip",
-  dummyAuthenticate,
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { name, description } = req.body;
