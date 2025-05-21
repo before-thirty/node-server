@@ -38,6 +38,7 @@ import {
 import { PrismaClient } from "@prisma/client";
 import { authenticate, dummyAuthenticate } from "./middleware/currentUser";
 import { getDummyStartAndEndDate } from "./utils/jsUtils";
+import { auth } from "firebase-admin";
 
 dotenv.config();
 
@@ -90,6 +91,7 @@ app.get("/api/status", async (req: Request, res: Response) => {
 
 app.post(
   "/api/extract-lat-long",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate the request body using Zod
@@ -265,7 +267,6 @@ app.get(
   }
 );
 
-
 app.post(
   "/api/user-trips",
   authenticate,
@@ -409,6 +410,7 @@ const tripContentQuerySchema = z.object({
 
 app.get(
   "/api/trip/:tripId/content",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate request parameters
@@ -452,6 +454,7 @@ app.get(
 
 app.post(
   "/api/add-user-to-trip",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { user_id, trip_id } = req.body;
@@ -467,6 +470,7 @@ app.post(
 
 app.get(
   "/api/getUsersFromTrip",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { tripId } = req.query;
@@ -482,6 +486,7 @@ app.get(
 // api for sending message
 app.post(
   "/api/addMessage",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { tripId, userId, message, timestamp, type } = req.body;
@@ -496,6 +501,7 @@ app.post(
 );
 app.get(
   "/api/getMessagesByTrip",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { tripId, before, limit = 20 } = req.query;
@@ -550,6 +556,7 @@ app.get("/api/getUsername", async (req: Request, res: Response) => {
 
 app.get(
   "/api/trip/:tripId",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate request parameters
