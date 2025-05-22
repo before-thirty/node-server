@@ -70,7 +70,6 @@ const UserSchema = z.object({
 const ContentSchema = z.object({
   url: z.string().url(),
   content: z.string().optional(),
-  user_id: z.string().uuid(),
   trip_id: z.string().uuid(),
   user_notes: z.string().optional(),
 });
@@ -95,8 +94,14 @@ app.post(
   async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate the request body using Zod
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        throw new Error("User not authenticated");
+      }
+      const user_id = currentUser.id; 
       const validatedData = ContentSchema.parse(req.body);
-      const { url, content, user_id, trip_id, user_notes } = validatedData;
+      console.log(validatedData)
+      const { url, content, trip_id, user_notes } = validatedData;
 
       req.logger?.info(
         `Request received: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`
@@ -457,7 +462,12 @@ app.post(
   authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { user_id, trip_id } = req.body;
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        throw new Error("User not authenticated");
+      }
+      const user_id = currentUser.id; 
+      const { trip_id } = req.body;
       console.log(user_id, trip_id);
       await addUserToTrip(trip_id, user_id);
       res.status(201).json({ message: "User added to trip successfully." });
@@ -489,7 +499,13 @@ app.post(
   authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { tripId, userId, message, timestamp, type } = req.body;
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        throw new Error("User not authenticated");
+      }
+      const userId = currentUser.id; 
+
+      const { tripId, message, timestamp, type } = req.body;
       console.log(req.body);
       await addMessage(tripId, userId, message, timestamp, type);
       res.status(200).json({ message: "Message received successfully." });
