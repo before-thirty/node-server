@@ -36,6 +36,7 @@ import { authenticate, dummyAuthenticate } from "./middleware/currentUser";
 import { getDummyStartAndEndDate } from "./utils/jsUtils";
 import crypto from "crypto";
 
+import { auth } from "firebase-admin";
 
 dotenv.config();
 
@@ -67,7 +68,6 @@ const UserSchema = z.object({
 const ContentSchema = z.object({
   url: z.string().url(),
   content: z.string().optional(),
-  user_id: z.string().uuid(),
   trip_id: z.string().uuid(),
   user_notes: z.string().optional(),
 });
@@ -88,11 +88,18 @@ app.get("/api/status", async (req: Request, res: Response) => {
 
 app.post(
   "/api/extract-lat-long",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate the request body using Zod
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        throw new Error("User not authenticated");
+      }
+      const user_id = currentUser.id; 
       const validatedData = ContentSchema.parse(req.body);
-      const { url, content, user_id, trip_id, user_notes } = validatedData;
+      console.log(validatedData)
+      const { url, content, trip_id, user_notes } = validatedData;
 
       req.logger?.info(
         `Request received: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`
@@ -239,7 +246,34 @@ app.post(
 
 app.get(
   "/api/user-trips",
-  dummyAuthenticate,
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        throw new Error("User not authenticated");
+      }
+      const { id } = currentUser;
+      const trips = await getTripsByUserId(id);
+      if (trips.length === 0) {
+        res.status(404).json({ error: "No trips found for the given user." });
+        return;
+      }
+      res.status(200).json(trips);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        console.error(`Error fetching trips:`, error);
+        res.status(500).json({ error: "Internal server error." });
+      }
+    }
+  }
+);
+
+app.post(
+  "/api/user-trips",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const currentUser = req.currentUser;
@@ -316,7 +350,7 @@ app.post("/api/signin-with-google", async (req, res) => {
 
 app.post(
   "/api/create-trip",
-  dummyAuthenticate,
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { name, description } = req.body;
@@ -380,6 +414,7 @@ const tripContentQuerySchema = z.object({
 
 app.get(
   "/api/trip/:tripId/content",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate request parameters
@@ -423,9 +458,15 @@ app.get(
 
 app.post(
   "/api/add-user-to-trip",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { user_id, trip_id } = req.body;
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        throw new Error("User not authenticated");
+      }
+      const user_id = currentUser.id; 
+      const { trip_id } = req.body;
       console.log(user_id, trip_id);
       await addUserToTrip(trip_id, user_id);
       res.status(201).json({ message: "User added to trip successfully." });
@@ -438,6 +479,7 @@ app.post(
 
 app.get(
   "/api/getUsersFromTrip",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { tripId } = req.query;
@@ -453,9 +495,16 @@ app.get(
 // api for sending message
 app.post(
   "/api/addMessage",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { tripId, userId, message, timestamp, type } = req.body;
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        throw new Error("User not authenticated");
+      }
+      const userId = currentUser.id; 
+
+      const { tripId, message, timestamp, type } = req.body;
       console.log(req.body);
       await addMessage(tripId, userId, message, timestamp, type);
       res.status(200).json({ message: "Message received successfully." });
@@ -467,6 +516,7 @@ app.post(
 );
 app.get(
   "/api/getMessagesByTrip",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { tripId, before, limit = 20 } = req.query;
@@ -521,6 +571,7 @@ app.get("/api/getUsername", async (req: Request, res: Response) => {
 
 app.get(
   "/api/trip/:tripId",
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate request parameters
