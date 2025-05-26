@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  schema   = "app_data"
 }
 
 datasource db {
@@ -9,29 +8,33 @@ datasource db {
 }
 
 model User {
-  id          String     @id @default(uuid())
+  id          String        @id @default(uuid())
   name        String
-  email       String     @unique
+  email       String        @unique
   phoneNumber String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   firebaseId  String
-  contents    Content[]
   Message     ChatMessage[]
+  contents    Content[]
+  ShareToken  ShareToken[]
   tripUsers   TripUser[]
 }
 
 model Trip {
-  id          String     @id @default(uuid())
-  name        String
-  startDate   DateTime
-  endDate     DateTime
-  description String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  contents    Content[]
-  Message     ChatMessage[]
-  tripUsers   TripUser[]
+  id            String        @id @default(uuid())
+  name          String
+  startDate     DateTime
+  endDate       DateTime
+  description   String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  lastContentId String?
+  Message       ChatMessage[]
+  contents      Content[]
+  ShareToken    ShareToken[]
+  last_content  Content?      @relation("LastContent", fields: [lastContentId], references: [id])
+  tripUsers     TripUser[]
 }
 
 model TripUser {
@@ -47,18 +50,20 @@ model TripUser {
 }
 
 model Content {
-  id             String   @id @default(uuid())
-  url            String
-  rawData        String
-  structuredData String
-  userId         String
-  tripId         String
-  userNotes String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  trip           Trip     @relation(fields: [tripId], references: [id])
-  user           User     @relation(fields: [userId], references: [id])
-  pins           Pin[]
+  id                         String   @id @default(uuid())
+  url                        String
+  rawData                    String
+  structuredData             String
+  userId                     String
+  tripId                     String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  userNotes                  String?
+  pins_count                 Int      @default(0)
+  trip                       Trip     @relation(fields: [tripId], references: [id])
+  user                       User     @relation(fields: [userId], references: [id])
+  pins                       Pin[]
+  unusedTripsWithLastContent Trip[]   @relation("LastContent")
 }
 
 model Pin {
@@ -102,4 +107,15 @@ model ChatMessage {
   tripId    String
   trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id])
+}
+
+model ShareToken {
+  id        String   @id
+  token     String   @unique
+  tripId    String
+  createdBy String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  User      User     @relation(fields: [createdBy], references: [id])
+  Trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
 }
