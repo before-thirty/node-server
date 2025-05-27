@@ -29,14 +29,20 @@ import {
   createTripAndTripUser,
   addUserToTrip,
   getUsersByIds,
-  getUsersFromTrip, addMessage, getMessageById, getMessagesByTime, getUsername,getShareTokenDetails,createShareToken,isUserInTrip,generateUniqueToken,getTripMemberCount
+  getUsersFromTrip,
+  addMessage,
+  getMessageById,
+  getMessagesByTime,
+  getUsername,
+  getShareTokenDetails,
+  createShareToken,
+  isUserInTrip,
+  generateUniqueToken,
+  getTripMemberCount,
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
-import { authenticate, dummyAuthenticate } from "./middleware/currentUser";
+import { authenticate } from "./middleware/currentUser";
 import { getDummyStartAndEndDate } from "./utils/jsUtils";
-import crypto from "crypto";
-
-import { auth } from "firebase-admin";
 
 dotenv.config();
 
@@ -96,9 +102,8 @@ app.post(
       if (currentUser == null) {
         throw new Error("User not authenticated");
       }
-      const user_id = currentUser.id; 
+      const user_id = currentUser.id;
       const validatedData = ContentSchema.parse(req.body);
-      console.log(validatedData)
       const { url, content, trip_id, user_notes } = validatedData;
 
       req.logger?.info(
@@ -106,6 +111,7 @@ app.post(
       );
 
       let description = content ?? "";
+      let contentThumbnail = "";
 
       // If content is empty, fetch metadata from the URL
       if (!content || content.trim() === "") {
@@ -114,6 +120,7 @@ app.post(
         );
         const metadata = await getMetadata(url);
         description = metadata?.meta.description ?? "";
+        contentThumbnail = metadata?.og.image ?? "";
       }
 
       if (!description) {
@@ -130,15 +137,24 @@ app.post(
         description,
         user_id,
         trip_id,
-        user_notes
+        user_notes,
+        contentThumbnail
       );
 
-        // Extract structured data using AI
-        console.log("Calling with desc ",description)
-        const analysis = await extractLocationAndClassify(description ?? "",req);
+      // Extract structured data using AI
+      const analysis = await extractLocationAndClassify(description ?? "", req);
 
-      // Update the Content entry with structured data
-      await updateContent(newContent.id, analysis);
+      // Get title from the first analysis object, if present
+      const title =
+        analysis && analysis.length > 0 && analysis[0].title
+          ? analysis[0].title
+          : "";
+
+      // Update the Content entry with structured data and title
+      const pinsCount = analysis.filter(
+        (a) => a.classification !== "Not Pinned"
+      ).length;
+      await updateContent(newContent.id, analysis, title, pinsCount);
       req.logger?.debug(
         `Updated content entry with structured data ${newContent.id}`
       );
@@ -146,6 +162,9 @@ app.post(
       // Process each analysis object in the list
       const responses = await Promise.all(
         analysis.map(async (analysis) => {
+          if (analysis.classification === "Not Pinned") {
+            return analysis;
+          }
           const full_loc =
             (analysis.name ?? "") + " " + (analysis.location ?? "");
 
@@ -465,7 +484,7 @@ app.post(
       if (currentUser == null) {
         throw new Error("User not authenticated");
       }
-      const user_id = currentUser.id; 
+      const user_id = currentUser.id;
       const { trip_id } = req.body;
       console.log(user_id, trip_id);
       await addUserToTrip(trip_id, user_id);
@@ -502,7 +521,7 @@ app.post(
       if (currentUser == null) {
         throw new Error("User not authenticated");
       }
-      const userId = currentUser.id; 
+      const userId = currentUser.id;
 
       const { tripId, message, timestamp, type } = req.body;
       console.log(req.body);
@@ -587,7 +606,6 @@ app.get(
   }
 );
 
-
 // Add this to your existing schemas
 const ShareTripSchema = z.object({
   tripId: z.string().uuid(),
@@ -604,13 +622,13 @@ app.post(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { tripId } = ShareTripSchema.parse(req.body);
-      
+
       const currentUser = req.currentUser;
       if (currentUser == null) {
         res.status(401).json({ error: "User not authenticated" });
         return;
       }
-      
+
       req.logger?.info(
         `Share link request received: tripId=${tripId}, userId=${currentUser.id}`
       );
@@ -625,27 +643,26 @@ app.post(
       // Verify the user is part of this trip
       const userInTrip = await isUserInTrip(currentUser.id, tripId);
       if (!userInTrip) {
-        res.status(403).json({ 
-          error: "Only trip members can generate share links" 
+        res.status(403).json({
+          error: "Only trip members can generate share links",
         });
         return;
       }
 
       // Generate unique token
       const uniqueToken = generateUniqueToken();
-      
+
       // Store token in database
       await createShareToken(uniqueToken, tripId, currentUser.id);
-      
+
       // Create the deep link URL
       // This URL format should match your mobile app's deep link configuration
       const deepLink = `before-thirty://join-trip/${uniqueToken}`;
-      
-      res.status(200).json({ 
+
+      res.status(200).json({
         success: true,
-        shareLink: deepLink
+        shareLink: deepLink,
       });
-      
     } catch (error) {
       if (error instanceof z.ZodError) {
         res
@@ -665,37 +682,37 @@ app.get(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { token } = req.params;
-      
+
       if (!token) {
         res.status(400).json({ error: "Token is required" });
         return;
       }
-      
+
       // Get trip information from token
       const shareToken = await getShareTokenDetails(token);
-      
+
       if (!shareToken) {
         res.status(404).json({ error: "Invalid share link" });
         return;
       }
-      
+
       // Check if token has expired
       if (shareToken.expiresAt < new Date()) {
         res.status(410).json({ error: "Share link has expired" });
         return;
       }
-      
+
       // Get trip details
       const trip = await getTripById(shareToken.tripId);
-      
+
       if (!trip) {
         res.status(404).json({ error: "Trip not found" });
         return;
       }
-      
+
       // Get member count
       const memberCount = await getTripMemberCount(shareToken.tripId);
-      
+
       res.status(200).json({
         success: true,
         tripDetails: {
@@ -704,10 +721,9 @@ app.get(
           description: trip.description,
           memberCount,
           startDate: trip.startDate,
-          endDate: trip.endDate
-        }
+          endDate: trip.endDate,
+        },
       });
-      
     } catch (error) {
       console.error("Error fetching trip details from token:", error);
       res.status(500).json({ error: "Internal server error." });
@@ -722,84 +738,83 @@ app.post(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { token } = JoinTripSchema.parse(req.body);
-      
+
       const currentUser = req.currentUser;
       if (!currentUser) {
-        res.status(401).json({ 
+        res.status(401).json({
           success: false,
-          error: "User not authenticated" 
+          error: "User not authenticated",
         });
         return;
       }
-      
+
       // Get trip information from token
       const shareToken = await getShareTokenDetails(token);
-      
+
       if (!shareToken) {
-        res.status(404).json({ 
+        res.status(404).json({
           success: false,
-          error: "Invalid share link" 
+          error: "Invalid share link",
         });
         return;
       }
-      
+
       // Check if token has expired
       if (shareToken.expiresAt < new Date()) {
-        res.status(410).json({ 
+        res.status(410).json({
           success: false,
-          error: "Share link has expired" 
+          error: "Share link has expired",
         });
         return;
       }
-      
+
       // Get trip details
       const trip = await getTripById(shareToken.tripId);
-      
+
       if (!trip) {
-        res.status(404).json({ 
+        res.status(404).json({
           success: false,
-          error: "Trip not found" 
+          error: "Trip not found",
         });
         return;
       }
-      
+
       // Check if user is already in the trip
       const userInTrip = await isUserInTrip(currentUser.id, shareToken.tripId);
-      
+
       if (userInTrip) {
         // User is already in the trip
         res.status(200).json({
           success: true,
           message: "You are already a member of this trip",
           alreadyMember: true,
-          trip: trip
+          trip: trip,
         });
         return;
       }
-      
+
       // Add user to the trip
       await addUserToTrip(shareToken.tripId, currentUser.id, "member");
-      
+
       // Return success response with trip details
       res.status(200).json({
         success: true,
         message: "Successfully joined trip",
         alreadyMember: false,
-        trip: trip
+        trip: trip,
       });
-      
     } catch (error) {
       if (error instanceof z.ZodError) {
-        res.status(400).json({ 
+        res.status(400).json({
           success: false,
-          error: "Invalid input data", 
-          details: error.errors 
+          error: "Invalid input data",
+          details: error.errors,
         });
       } else {
         console.error("Error joining trip:", error);
-        res.status(500).json({ 
+        res.status(500).json({
           success: false,
-          error: "Internal server error." 
+          error: "Internal server error.",
         });
       }
     }

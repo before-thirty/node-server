@@ -12,7 +12,8 @@ export const createContent = async (
   description: string,
   userId: string,
   tripId: string,
-  userNotes?: string
+  userNotes?: string,
+  contentThumbnail?: string
 ) => {
   return await prisma.content.create({
     data: {
@@ -22,11 +23,17 @@ export const createContent = async (
       userId: userId,
       tripId: tripId,
       userNotes: userNotes,
+      thumbnail: contentThumbnail,
     },
   });
 };
 // Update an existing Content entry with structured data
-export const updateContent = async (contentId: string, structuredData: any) => {
+export const updateContent = async (
+  contentId: string,
+  structuredData: any,
+  title?: string,
+  pinsCount?: number
+) => {
   return await prisma.content.update({
     where: { id: contentId },
     data: {
@@ -34,6 +41,8 @@ export const updateContent = async (contentId: string, structuredData: any) => {
         typeof structuredData === "string"
           ? structuredData
           : JSON.stringify(structuredData),
+      ...(title !== undefined && { title }),
+      ...(pinsCount !== undefined && { pins_count: pinsCount }),
     },
   });
 };
@@ -244,7 +253,10 @@ export const getTripContentData = async (
       userId: true,
       tripId: true,
       userNotes: true,
-      createdAt: true, // Added to check against last login
+      createdAt: true,
+      title: true,
+      thumbnail: true,
+      pins_count: true,
     },
   });
 
