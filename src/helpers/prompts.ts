@@ -10,6 +10,7 @@ export const captionPrompt = `
               - **"activities"** (for activities places) or
               - **"nature"** (for nature places) or
               - **"attractions"** (for attractions places) or
+              - **"accomodation"** (for hotels, airbnbs, villas, resorts) or
               - **"not pinned"** (for captions that do not mention any place or just a country)
             3. Identify the **city and country** where the place is located.
             4. Use **Google Maps Extension ** to find the **latitude and longitude**.
@@ -30,7 +31,7 @@ export const captionPrompt = `
                 "name": "<Place Name>",
                 "title": "<Title of the content>",
                 "location": "<Address, City, Country>",
-                "classification": "<One of: Food, Night life, Activities, Nature, Attractions ,Shopping ,Not Pinned>",
+                "classification": "<One of: Food, Night life, Activities, Nature, Attractions ,Shopping ,accomodation ,Not Pinned>",
                 "additional_info": "<Any other relevant details from the caption>",
                 "lat": <Latitude as a number or null>,
                 "long": <Longitude as a number or null>
