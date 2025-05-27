@@ -17,7 +17,6 @@ model User {
   firebaseId  String
   Message     ChatMessage[]
   contents    Content[]
-  ShareToken  ShareToken[]
   tripUsers   TripUser[]
   ShareToken  ShareToken[]
 }
@@ -36,7 +35,6 @@ model Trip {
   ShareToken    ShareToken[]
   last_content  Content?      @relation("LastContent", fields: [lastContentId], references: [id])
   tripUsers     TripUser[]
-  ShareToken  ShareToken[]
 }
 
 model TripUser {
