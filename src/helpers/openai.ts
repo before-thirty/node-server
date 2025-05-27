@@ -42,13 +42,18 @@ export async function extractLocationAndClassify(
             ## **Instructions**:
             1. Analyze the caption and identify **any locations** mentioned.
             2. Categorize each place as either:
-              - **"restaurant"** (for food-related places) or
-              - **"tourist spot"** (for sightseeing and attractions).
+              - **"Food"** (for food-related places) or
+              - **"Night life"** (for bars clubs and night life activites).
+              - **"Nature"** (for natural things like mountains hikes,caves, lakes etc do not include adventure activites here)
+              - **"Activites"** (for things to do such as amusement parks, scuba diving, cooking classes,adventure activites)
+              - **"Shopping"** (for things like markets, malls)
+              - **"Attractions"** (for man made tourist spots such as museums, statues, gardens, temples)
             3. Identify the **city and country** where the place is located.
             4. Use **Google Maps Extension ** to find the **latitude and longitude**.
             5. Extract any **additional useful details** from the caption.
             6. **Return only valid JSON with no extra text or explanations.**
             7. Transalte the text to ENGLISH if it is in any other language wherever possible
+            8. 
 
             ---
 
@@ -57,7 +62,7 @@ export async function extractLocationAndClassify(
               {
                 "name": "<Place Name>",
                 "location": "<Address, City, Country>",
-                "classification": "<One of: Food, Night life, Outdoor, Activities, Attraction>",
+                "classification": "<One of: Food, Night life, Activities, Nature, Attractions ,Shopping>",
                 "additional_info": "<Any other relevant details from the caption>",
                 "lat": <Latitude as a number>,
                 "long": <Longitude as a number>

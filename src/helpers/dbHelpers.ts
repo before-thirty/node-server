@@ -1,5 +1,9 @@
 import { PrismaClient, User } from "@prisma/client";
 
+import { v4 as uuidv4 } from 'uuid';
+
+
+
 const prisma = new PrismaClient();
 
 // Create a new Content entry
@@ -309,18 +313,42 @@ export const getContentPinsPlaceNested = async (tripId: string) => {
   return nestedTrip;
 };
 
-export const addUserToTrip = async (tripId: string, userId: string) => {
-  const tripUser = await prisma.tripUser.create({
-    data: {
-      userId: userId,
-      tripId: tripId,
-      role: "Admin",
-    },
-  });
-
-  // need to add socket.io code here
-
-  return tripUser;
+export const addUserToTrip = async (
+  tripId: string, 
+  userId: string, 
+  role: string = "member"
+): Promise<any> => {
+  const prisma = new PrismaClient();
+  try {
+    // Check if the user is already in the trip
+    const existingTripUser = await prisma.tripUser.findUnique({
+      where: {
+        tripId_userId: {
+          tripId,
+          userId
+        }
+      }
+    });
+    
+    if (existingTripUser) {
+      return existingTripUser;
+    }
+    
+    const tripUser = await prisma.tripUser.create({
+      data: {
+        tripId,
+        userId,
+        role
+      }
+    });
+    
+    return tripUser;
+  } catch (error) {
+    console.error("Error adding user to trip:", error);
+    throw error;
+  } finally {
+    await prisma.$disconnect();
+  }
 };
 
 export const getUsersFromTrip = async (tripId: string) => {
@@ -407,4 +435,99 @@ export const getUsersByIds = async (userIds: string[]) => {
   return await prisma.user.findMany({
     where: { id: { in: userIds } },
   });
+};
+
+
+
+// === Share Token Helper Functions ===
+
+// Function to generate a unique token
+export const generateUniqueToken = (): string => {
+  return uuidv4().replace(/-/g, '');
+};
+
+// Function to create a share token in the database
+export const createShareToken = async (
+  token: string,
+  tripId: string,
+  userId: string
+): Promise<any> => {
+  try {
+    // Set expiration to 7 days from now
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    
+    const shareToken = await prisma.shareToken.create({
+      data: {
+        token,
+        tripId,
+        createdBy: userId,
+        expiresAt
+      }
+    });
+    
+    return shareToken;
+  } catch (error) {
+    console.error("Error creating share token:", error);
+    throw error;
+  }
+};
+
+// Function to get share token details by token
+export const getShareTokenDetails = async (
+  token: string
+): Promise<any> => {
+  try {
+    const shareToken = await prisma.shareToken.findUnique({
+      where: {
+        token
+      },
+      include: {
+        trip: true
+      }
+    });
+    
+    return shareToken;
+  } catch (error) {
+    console.error("Error fetching share token:", error);
+    throw error;
+  }
+};
+
+// Function to check if a user is a member of a trip
+export const isUserInTrip = async (
+  userId: string,
+  tripId: string
+): Promise<boolean> => {
+  try {
+    const tripUser = await prisma.tripUser.findUnique({
+      where: {
+        tripId_userId: {
+          tripId,
+          userId
+        }
+      }
+    });
+    
+    return !!tripUser;
+  } catch (error) {
+    console.error("Error checking if user is in trip:", error);
+    throw error;
+  }
+};
+
+// Function to get the number of members in a trip
+export const getTripMemberCount = async (
+  tripId: string
+): Promise<number> => {
+  try {
+    const count = await prisma.tripUser.count({
+      where: { tripId }
+    });
+    
+    return count;
+  } catch (error) {
+    console.error("Error getting trip member count:", error);
+    throw error;
+  }
 };
