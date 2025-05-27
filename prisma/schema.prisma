@@ -60,6 +60,8 @@ model Content {
   updatedAt                  DateTime @updatedAt
   userNotes                  String?
   pins_count                 Int      @default(0)
+  thumbnail                  String   @default("")
+  title                    String   @default("")
   trip                       Trip     @relation(fields: [tripId], references: [id])
   user                       User     @relation(fields: [userId], references: [id])
   pins                       Pin[]
