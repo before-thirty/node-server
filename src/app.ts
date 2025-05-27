@@ -36,9 +36,8 @@ import {
   getUsersByIds,
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
-import { authenticate, dummyAuthenticate } from "./middleware/currentUser";
+import { authenticate } from "./middleware/currentUser";
 import { getDummyStartAndEndDate } from "./utils/jsUtils";
-import { auth } from "firebase-admin";
 
 dotenv.config();
 
@@ -98,9 +97,8 @@ app.post(
       if (currentUser == null) {
         throw new Error("User not authenticated");
       }
-      const user_id = currentUser.id; 
+      const user_id = currentUser.id;
       const validatedData = ContentSchema.parse(req.body);
-      console.log(validatedData)
       const { url, content, trip_id, user_notes } = validatedData;
 
       req.logger?.info(
@@ -108,6 +106,7 @@ app.post(
       );
 
       let description = content ?? "";
+      let contentThumbnail = "";
 
       // If content is empty, fetch metadata from the URL
       if (!content || content.trim() === "") {
@@ -116,6 +115,7 @@ app.post(
         );
         const metadata = await getMetadata(url);
         description = metadata?.meta.description ?? "";
+        contentThumbnail = metadata?.og.image ?? "";
       }
 
       if (!description) {
@@ -132,14 +132,24 @@ app.post(
         description,
         user_id,
         trip_id,
-        user_notes
+        user_notes,
+        contentThumbnail
       );
 
       // Extract structured data using AI
       const analysis = await extractLocationAndClassify(description ?? "", req);
 
-      // Update the Content entry with structured data
-      await updateContent(newContent.id, analysis);
+      // Get title from the first analysis object, if present
+      const title =
+        analysis && analysis.length > 0 && analysis[0].title
+          ? analysis[0].title
+          : "";
+
+      // Update the Content entry with structured data and title
+      const pinsCount = analysis.filter(
+        (a) => a.classification !== "Not Pinned"
+      ).length;
+      await updateContent(newContent.id, analysis, title, pinsCount);
       req.logger?.debug(
         `Updated content entry with structured data ${newContent.id}`
       );
@@ -147,6 +157,9 @@ app.post(
       // Process each analysis object in the list
       const responses = await Promise.all(
         analysis.map(async (analysis) => {
+          if (analysis.classification === "Not Pinned") {
+            return analysis;
+          }
           const full_loc =
             (analysis.name ?? "") + " " + (analysis.location ?? "");
 
@@ -466,7 +479,7 @@ app.post(
       if (currentUser == null) {
         throw new Error("User not authenticated");
       }
-      const user_id = currentUser.id; 
+      const user_id = currentUser.id;
       const { trip_id } = req.body;
       console.log(user_id, trip_id);
       await addUserToTrip(trip_id, user_id);
@@ -503,7 +516,7 @@ app.post(
       if (currentUser == null) {
         throw new Error("User not authenticated");
       }
-      const userId = currentUser.id; 
+      const userId = currentUser.id;
 
       const { tripId, message, timestamp, type } = req.body;
       console.log(req.body);
