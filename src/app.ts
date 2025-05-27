@@ -28,12 +28,17 @@ import {
   getUserByFirebaseId,
   createTripAndTripUser,
   addUserToTrip,
+  getUsersByIds,
   getUsersFromTrip,
   addMessage,
   getMessageById,
   getMessagesByTime,
   getUsername,
-  getUsersByIds,
+  getShareTokenDetails,
+  createShareToken,
+  isUserInTrip,
+  generateUniqueToken,
+  getTripMemberCount,
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "./middleware/currentUser";
@@ -601,6 +606,220 @@ app.get(
   }
 );
 
+// Add this to your existing schemas
+const ShareTripSchema = z.object({
+  tripId: z.string().uuid(),
+});
+
+const JoinTripSchema = z.object({
+  token: z.string(),
+});
+
+// Route to generate a share link for a trip
+app.post(
+  "/api/generate-share-link",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { tripId } = ShareTripSchema.parse(req.body);
+
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      req.logger?.info(
+        `Share link request received: tripId=${tripId}, userId=${currentUser.id}`
+      );
+
+      // Verify the trip exists
+      const trip = await getTripById(tripId);
+      if (!trip) {
+        res.status(404).json({ error: "Trip not found" });
+        return;
+      }
+
+      // Verify the user is part of this trip
+      const userInTrip = await isUserInTrip(currentUser.id, tripId);
+      if (!userInTrip) {
+        res.status(403).json({
+          error: "Only trip members can generate share links",
+        });
+        return;
+      }
+
+      // Generate unique token
+      const uniqueToken = generateUniqueToken();
+
+      // Store token in database
+      await createShareToken(uniqueToken, tripId, currentUser.id);
+
+      // Create the deep link URL
+      // This URL format should match your mobile app's deep link configuration
+      const deepLink = `before-thirty://join-trip/${uniqueToken}`;
+
+      res.status(200).json({
+        success: true,
+        shareLink: deepLink,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json({ error: "Invalid input data", details: error.errors });
+      } else {
+        console.error(`Error generating share link:`, error);
+        res.status(500).json({ error: "Internal server error." });
+      }
+    }
+  }
+);
+
+// Route to get trip details from a token
+app.get(
+  "/api/join-trip/:token",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { token } = req.params;
+
+      if (!token) {
+        res.status(400).json({ error: "Token is required" });
+        return;
+      }
+
+      // Get trip information from token
+      const shareToken = await getShareTokenDetails(token);
+
+      if (!shareToken) {
+        res.status(404).json({ error: "Invalid share link" });
+        return;
+      }
+
+      // Check if token has expired
+      if (shareToken.expiresAt < new Date()) {
+        res.status(410).json({ error: "Share link has expired" });
+        return;
+      }
+
+      // Get trip details
+      const trip = await getTripById(shareToken.tripId);
+
+      if (!trip) {
+        res.status(404).json({ error: "Trip not found" });
+        return;
+      }
+
+      // Get member count
+      const memberCount = await getTripMemberCount(shareToken.tripId);
+
+      res.status(200).json({
+        success: true,
+        tripDetails: {
+          id: trip.id,
+          name: trip.name,
+          description: trip.description,
+          memberCount,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching trip details from token:", error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+);
+
+// Route to join a trip using a token
+app.post(
+  "/api/join-trip",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { token } = JoinTripSchema.parse(req.body);
+
+      const currentUser = req.currentUser;
+      if (!currentUser) {
+        res.status(401).json({
+          success: false,
+          error: "User not authenticated",
+        });
+        return;
+      }
+
+      // Get trip information from token
+      const shareToken = await getShareTokenDetails(token);
+
+      if (!shareToken) {
+        res.status(404).json({
+          success: false,
+          error: "Invalid share link",
+        });
+        return;
+      }
+
+      // Check if token has expired
+      if (shareToken.expiresAt < new Date()) {
+        res.status(410).json({
+          success: false,
+          error: "Share link has expired",
+        });
+        return;
+      }
+
+      // Get trip details
+      const trip = await getTripById(shareToken.tripId);
+
+      if (!trip) {
+        res.status(404).json({
+          success: false,
+          error: "Trip not found",
+        });
+        return;
+      }
+
+      // Check if user is already in the trip
+      const userInTrip = await isUserInTrip(currentUser.id, shareToken.tripId);
+
+      if (userInTrip) {
+        // User is already in the trip
+        res.status(200).json({
+          success: true,
+          message: "You are already a member of this trip",
+          alreadyMember: true,
+          trip: trip,
+        });
+        return;
+      }
+
+      // Add user to the trip
+      await addUserToTrip(shareToken.tripId, currentUser.id, "member");
+
+      // Return success response with trip details
+      res.status(200).json({
+        success: true,
+        message: "Successfully joined trip",
+        alreadyMember: false,
+        trip: trip,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          success: false,
+          error: "Invalid input data",
+          details: error.errors,
+        });
+      } else {
+        console.error("Error joining trip:", error);
+        res.status(500).json({
+          success: false,
+          error: "Internal server error.",
+        });
+      }
+    }
+  }
+);
 // Start the server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

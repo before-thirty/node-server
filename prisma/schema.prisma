@@ -17,8 +17,8 @@ model User {
   firebaseId  String
   Message     ChatMessage[]
   contents    Content[]
-  ShareToken  ShareToken[]
   tripUsers   TripUser[]
+  ShareToken  ShareToken[]
 }
 
 model Trip {
@@ -112,12 +112,12 @@ model ChatMessage {
 }
 
 model ShareToken {
-  id        String   @id
+  id        String   @id @default(uuid())
   token     String   @unique
   tripId    String
   createdBy String
   createdAt DateTime @default(now())
   expiresAt DateTime
-  User      User     @relation(fields: [createdBy], references: [id])
-  Trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [createdBy], references: [id])
 }
