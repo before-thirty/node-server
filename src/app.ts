@@ -76,6 +76,7 @@ const ContentSchema = z.object({
   content: z.string().optional(),
   trip_id: z.string().uuid(),
   user_notes: z.string().optional(),
+  user_id: z.string().uuid(),
 });
 
 const UserTripSchema = z.object({
@@ -94,17 +95,17 @@ app.get("/api/status", async (req: Request, res: Response) => {
 
 app.post(
   "/api/extract-lat-long",
-  authenticate,
+  // authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate the request body using Zod
-      const currentUser = req.currentUser;
-      if (currentUser == null) {
-        throw new Error("User not authenticated");
-      }
-      const user_id = currentUser.id;
+      // const currentUser = req.currentUser;
+      // if (currentUser == null) {
+      //   throw new Error("User not authenticated");
+      // }
+      // const user_id = currentUser.id;
       const validatedData = ContentSchema.parse(req.body);
-      const { url, content, trip_id, user_notes } = validatedData;
+      const { url, content, trip_id, user_notes ,user_id} = validatedData;
 
       req.logger?.info(
         `Request received: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`
@@ -622,24 +623,24 @@ app.post(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { tripId } = ShareTripSchema.parse(req.body);
-
       const currentUser = req.currentUser;
+      
       if (currentUser == null) {
         res.status(401).json({ error: "User not authenticated" });
         return;
       }
-
+      
       req.logger?.info(
         `Share link request received: tripId=${tripId}, userId=${currentUser.id}`
       );
-
+      
       // Verify the trip exists
       const trip = await getTripById(tripId);
       if (!trip) {
         res.status(404).json({ error: "Trip not found" });
         return;
       }
-
+      
       // Verify the user is part of this trip
       const userInTrip = await isUserInTrip(currentUser.id, tripId);
       if (!userInTrip) {
@@ -648,21 +649,27 @@ app.post(
         });
         return;
       }
-
+      
       // Generate unique token
       const uniqueToken = generateUniqueToken();
-
+      
       // Store token in database
       await createShareToken(uniqueToken, tripId, currentUser.id);
-
-      // Create the deep link URL
-      // This URL format should match your mobile app's deep link configuration
+      
+      // Create the web URL (instead of custom scheme)
+      // This will work in WhatsApp and other messaging apps
+      const shareLink = `https://pinspire.co.in/join-trip/${uniqueToken}`;
+      
+      // Also include the custom scheme as fallback for direct app integration
       const deepLink = `before-thirty://join-trip/${uniqueToken}`;
-
+      
       res.status(200).json({
         success: true,
-        shareLink: deepLink,
+        shareLink: shareLink,        // Primary link for sharing
+        deepLink: deepLink,          // Fallback for direct app usage
+        token: uniqueToken           // Token for reference
       });
+      
     } catch (error) {
       if (error instanceof z.ZodError) {
         res
