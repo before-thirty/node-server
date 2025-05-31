@@ -95,17 +95,17 @@ app.get("/api/status", async (req: Request, res: Response) => {
 
 app.post(
   "/api/extract-lat-long",
-  // authenticate,
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate the request body using Zod
-      // const currentUser = req.currentUser;
-      // if (currentUser == null) {
-      //   throw new Error("User not authenticated");
-      // }
-      // const user_id = currentUser.id;
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        throw new Error("User not authenticated");
+      }
+      const user_id = currentUser.id;
       const validatedData = ContentSchema.parse(req.body);
-      const { url, content, trip_id, user_notes ,user_id} = validatedData;
+      const { url, content, trip_id, user_notes } = validatedData;
 
       req.logger?.info(
         `Request received: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`
@@ -120,9 +120,13 @@ app.post(
           `The request doesnt contains content fetching metadata from URL`
         );
         const metadata = await getMetadata(url);
-        description = metadata?.meta.description ?? "";
+        description = [metadata?.meta.title, metadata?.meta.description]
+  .filter(Boolean)
+  .join(" ");
         contentThumbnail = metadata?.og.image ?? "";
       }
+
+      console.log("Desc is ",description)
 
       if (!description) {
         req.logger?.error(`Failed to fetch metadata for URL - ${url}`);

@@ -12,6 +12,7 @@ export const captionPrompt = `
               - **"attractions"** (for attractions places) or
               - **"accomodation"** (for hotels, airbnbs, villas, resorts) or
               - **"not pinned"** (for captions that do not mention any place or just a country)
+              In a single caption there can be multiple places with different categories
             3. Identify the **city and country** where the place is located.
             4. Use **Google Maps Extension ** to find the **latitude and longitude**.
             5. Extract any **additional useful details** from the caption.
