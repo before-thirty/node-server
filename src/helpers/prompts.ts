@@ -4,13 +4,13 @@ export const captionPrompt = `
             ## **Instructions**:
             1. Analyze the caption and identify **any locations** mentioned.
             2. Categorize each place as either:
-              - **"restaurant"** (for food-related places) or
+              - **"food"** (for food-related places) or
               - **"tourist spot"** (for sightseeing and attractions).
               - **"night life"** (for nightlife places) or
               - **"activities"** (for activities places) or
               - **"nature"** (for nature places) or
-              - **"attractions"** (for attractions places) or
-              - **"accomodation"** (for hotels, airbnbs, villas, resorts) or
+              - **"attraction"** (for attractions places) or
+              - **"accomodation"** (for hotels, airbnbs, villas, resorts, what points to accomodation) or
               - **"not pinned"** (for captions that do not mention any place or just a country)
               In a single caption there can be multiple places with different categories
             3. Identify the **city and country** where the place is located.
@@ -32,7 +32,7 @@ export const captionPrompt = `
                 "name": "<Place Name>",
                 "title": "<Title of the content>",
                 "location": "<Address, City, Country>",
-                "classification": "<One of: Food, Night life, Activities, Nature, Attractions ,Shopping ,accomodation ,Not Pinned>",
+                "classification": "<One of: Food, Night life, Activities, Nature, Attraction ,Shopping ,Accomodation ,Not Pinned>",
                 "additional_info": "<Any other relevant details from the caption>",
                 "lat": <Latitude as a number or null>,
                 "long": <Longitude as a number or null>
