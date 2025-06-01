@@ -96,6 +96,7 @@ model PlaceCache {
   websiteUri          String?
   images              String[]
   pins                Pin[]
+  utcOffsetMinutes Int?
 }
 
 model ChatMessage {
