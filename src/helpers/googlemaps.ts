@@ -9,15 +9,36 @@ const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY
 const GOOGLE_MAPS_IMAGE_API = "https://places.googleapis.com/v1";
 // https://places.googleapis.com/v1/NAME/media?key=API_KEY&PARAMETERS
 
+// Updated PlaceDetails interface
 interface PlaceDetails {
   id: string;
   name: string;
   rating?: number;
   userRatingCount?: number;
   websiteUri?: string;
-  images?: string[];
-  currentOpeningHours?: any; // Adjust type if needed
-  regularOpeningHours?: any; // Adjust type if needed
+  currentOpeningHours?: any;
+  regularOpeningHours?: any;
+  images: string[];
+  utcOffsetMinutes?: number;
+  location?: {
+    latitude: number;
+    longitude: number;
+  } | null;
+}
+
+// Updated createPlaceCache function parameters interface
+interface CreatePlaceCacheParams {
+  placeId: string;
+  name: string;
+  rating?: number | null;
+  userRatingCount?: number | null;
+  websiteUri?: string | null;
+  currentOpeningHours?: any;
+  regularOpeningHours?: any;
+  lat: number;
+  lng: number;
+  images: string[];
+  utcOffsetMinutes?: number | null;
 }
 
 
@@ -52,37 +73,29 @@ export async function getPlaceId(query: string,req:Request): Promise<string> {
 }
 
 
-export async function getFullPlaceDetails(query: string,req:Request): Promise<PlaceDetails> {
+export async function getFullPlaceDetails(query: string, req: Request): Promise<PlaceDetails> {
   try {
     const url = "https://places.googleapis.com/v1/places:searchText";
-
     const data = {
       textQuery: query,
     };
-
     const config = {
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask":
-          "places.addressComponents,places.formattedAddress,places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,places.currentOpeningHours,places.regularOpeningHours,places.photos",
+          "places.addressComponents,places.formattedAddress,places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,places.currentOpeningHours,places.regularOpeningHours,places.photos,places.utcOffsetMinutes,places.location",
       },
     };
-
     const response = await axios.post(url, data, config);
     const places = response.data.places;
-
     if (!places || places.length === 0) {
       throw new Error(`No places found by Google Places API for query: ${query}`);
     }
-
     const place = places[0];
-
-    
     // Extract photos field
     const photos = place.photos || [];
     let photoUrls: string[] = [];
-
     for (const photo of photos) {
       if (photo.name) {
         const imageUrl = `${GOOGLE_MAPS_IMAGE_API}/${photo.name}/media?maxWidthPx=800&skipHttpRedirect=true&key=${GOOGLE_MAPS_API_KEY}`;
@@ -91,7 +104,6 @@ export async function getFullPlaceDetails(query: string,req:Request): Promise<Pl
         if (response.status === 200) break;
       }
     }
-
     // Construct the PlaceDetails object
     return {
       id: place.id,
@@ -101,14 +113,18 @@ export async function getFullPlaceDetails(query: string,req:Request): Promise<Pl
       websiteUri: place.websiteUri,
       currentOpeningHours: place.currentOpeningHours,
       regularOpeningHours: place.regularOpeningHours,
-      images:photoUrls ?? []
+      images: photoUrls ?? [],
+      utcOffsetMinutes: place.utcOffsetMinutes,
+      location: place.location ? {
+        latitude: place.location.latitude,
+        longitude: place.location.longitude
+      } : null, // Add location coordinates
     };
   } catch (error) {
     req.logger?.error("Error calling Places API:", error);
     throw new Error("Failed to get place details from query.");
   }
 }
-
 
 export async function getCoordinatesFromPlaceId(
   placeId: string,req:Request

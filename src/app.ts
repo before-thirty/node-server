@@ -121,12 +121,12 @@ app.post(
         );
         const metadata = await getMetadata(url);
         description = [metadata?.meta.title, metadata?.meta.description]
-  .filter(Boolean)
-  .join(" ");
+          .filter(Boolean)
+          .join(" ");
         contentThumbnail = metadata?.og.image ?? "";
       }
 
-      console.log("Desc is ",description)
+      console.log("Desc is ", description);
 
       if (!description) {
         req.logger?.error(`Failed to fetch metadata for URL - ${url}`);
@@ -186,14 +186,23 @@ app.post(
             req.logger?.debug(
               "Could not find place in place Cache.. getting full place details"
             );
-            // Step 3: If not in cache, fetch full place details
+            // Step 3: If not in cache, fetch full place details (includes coordinates)
             const placeDetails = await getFullPlaceDetails(full_loc, req);
 
             req.logger?.debug(
               `Place details for placeID - ${placeId} is - ${placeDetails}`
             );
 
-            coordinates = await getCoordinatesFromPlaceId(placeId, req);
+            // Use coordinates from place details instead of separate API call
+            coordinates = placeDetails.location ? {
+              lat: placeDetails.location.latitude,
+              lng: placeDetails.location.longitude
+            } : null;
+
+            if (!coordinates) {
+              req.logger?.error(`No coordinates found for place: ${full_loc}`);
+              throw new Error(`Could not get coordinates for place: ${full_loc}`);
+            }
 
             req.logger?.debug(
               `Coordinates for placeID - ${placeId} is - ${coordinates}`
@@ -211,6 +220,7 @@ app.post(
               lat: coordinates.lat,
               lng: coordinates.lng,
               images: placeDetails.images ?? [],
+              utcOffsetMinutes: placeDetails.utcOffsetMinutes ?? null,
             });
 
             req.logger?.debug(
@@ -248,6 +258,7 @@ app.post(
               currentOpeningHours: placeCache.currentOpeningHours,
               regularOpeningHours: placeCache.regularOpeningHours,
               images: placeCache.images,
+              utcOffsetMinutes: placeCache.utcOffsetMinutes, // Add this line
             },
           };
         })
