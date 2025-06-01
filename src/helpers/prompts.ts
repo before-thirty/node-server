@@ -10,7 +10,7 @@ export const captionPrompt = `
               - **"activities"** (for activities places) or
               - **"nature"** (for nature places) or
               - **"attraction"** (for attractions places) or
-              - **"accomodation"** (for hotels, airbnbs, villas, resorts, what points to accomodation) or
+              - **"accommodation"** (for hotels, airbnbs, villas, resorts, what points to accommodation) or
               - **"not pinned"** (for captions that do not mention any place or just a country)
               In a single caption there can be multiple places with different categories
             3. Identify the **city and country** where the place is located.
@@ -32,7 +32,7 @@ export const captionPrompt = `
                 "name": "<Place Name>",
                 "title": "<Title of the content>",
                 "location": "<Address, City, Country>",
-                "classification": "<One of: Food, Night life, Activities, Nature, Attraction ,Shopping ,Accomodation ,Not Pinned>",
+                "classification": "<One of: Food, Night life, Activities, Nature, Attraction ,Shopping ,accommodation ,Not Pinned>",
                 "additional_info": "<Any other relevant details from the caption>",
                 "lat": <Latitude as a number or null>,
                 "long": <Longitude as a number or null>
