@@ -390,17 +390,26 @@ app.post(
     try {
       const { name, description } = req.body;
       const user = req.currentUser;
+      
       if (user == null) {
         throw new Error("User not authenticated");
       }
+      
+      // Validate that name is not empty
+      if (!name || name.trim() === "") {
+        res.status(400).json({ error: "Trip name is required and cannot be empty" });
+        return;
+      }
+      
       const { startDate, endDate } = getDummyStartAndEndDate();
       const newTrip = await createTripAndTripUser(
         user.id,
-        name,
+        name.trim(), // Also trim whitespace from the name
         startDate,
         endDate,
         description ?? ""
       );
+      
       console.log("Look at new trip", newTrip);
       res.status(201).json(newTrip);
     } catch (error) {
