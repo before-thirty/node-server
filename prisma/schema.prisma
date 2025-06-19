@@ -1,44 +1,54 @@
+// schema.prisma - Fixed schema with correct must-do implementation
+
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["app_data_embeddings_poc"]
 }
 
 model User {
-  id          String        @id @default(uuid())
-  name        String
-  email       String        @unique
-  phoneNumber String
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  firebaseId  String
-  Message     ChatMessage[]
-  contents    Content[]
-  ShareToken  ShareToken[]
-  tripUsers   TripUser[]
+  id              String             @id @default(uuid())
+  name            String
+  email           String             @unique
+  phoneNumber     String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  firebaseId      String
+  Message         ChatMessage[]
+  contents        Content[]
+  tripUsers       TripUser[]
+  ShareToken      ShareToken[]
+  userPlaceMustDos UserPlaceMustDo[] // Fixed naming to be plural and consistent
+
+  @@schema("app_data_embeddings_poc")
 }
 
 model Trip {
-  id            String        @id @default(uuid())
-  name          String
-  startDate     DateTime
-  endDate       DateTime
-  description   String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  lastContentId String?
+  id               String             @id @default(uuid())
+  name             String
+  startDate        DateTime
+  endDate          DateTime
+  description      String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  lastContentId    String?
   coverImage    String?
   isPublic      Boolean       @default(false)
   likes         Int?          @default(0)
   viewCount     Int?          @default(0)
-  Message       ChatMessage[]
-  contents      Content[]
-  ShareToken    ShareToken[]
-  last_content  Content?      @relation("LastContent", fields: [lastContentId], references: [id])
-  tripUsers     TripUser[]
+  Message          ChatMessage[]
+  contents         Content[]
+  ShareToken       ShareToken[]
+  last_content     Content?           @relation("LastContent", fields: [lastContentId], references: [id])
+  tripUsers        TripUser[]
+  userPlaceMustDos UserPlaceMustDo[]  // Added relation to must-do places in this trip
+
+  @@schema("app_data_embeddings_poc")
 }
 
 model TripUser {
@@ -51,6 +61,7 @@ model TripUser {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tripId, userId])
+  @@schema("app_data_embeddings_poc")
 }
 
 model Content {
@@ -65,11 +76,21 @@ model Content {
   userNotes                  String?
   pins_count                 Int      @default(0)
   thumbnail                  String   @default("")
-  title                      String   @default("")
+  title                        String   @default("")
+  
+  // Embedding columns for semantic search
+  title_embedding            Unsupported("vector(1536)")?
+  raw_data_embedding         Unsupported("vector(1536)")?
+  user_notes_embedding       Unsupported("vector(1536)")?
+  structured_data_embedding  Unsupported("vector(1536)")?
+  last_embedding_update      DateTime?
+  
   trip                       Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   pins                       Pin[]
   unusedTripsWithLastContent Trip[]   @relation("LastContent")
+
+  @@schema("app_data_embeddings_poc")
 }
 
 model Pin {
@@ -86,11 +107,11 @@ model Pin {
 }
 
 model PlaceCache {
-  id                  String   @id @default(uuid())
-  placeId             String   @unique
+  id                  String             @id @default(uuid())
+  placeId             String             @unique
   lat                 Float
   lng                 Float
-  createdAt           DateTime @default(now())
+  createdAt           DateTime           @default(now())
   lastCached          DateTime
   currentOpeningHours Json?
   name                String?
@@ -101,6 +122,10 @@ model PlaceCache {
   images              String[]
   utcOffsetMinutes    Int?
   pins                Pin[]
+  utcOffsetMinutes    Int?
+  userPlaceMustDos    UserPlaceMustDo[]  // Added relation to users who marked this place as must-do
+
+  @@schema("app_data_embeddings_poc")
 }
 
 model ChatMessage {
@@ -114,6 +139,8 @@ model ChatMessage {
   tripId    String
   trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@schema("app_data_embeddings_poc")
 }
 
 model ShareToken {
@@ -125,4 +152,23 @@ model ShareToken {
   expiresAt DateTime
   user      User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [createdBy], references: [id])
+
+  @@schema("app_data_embeddings_poc")
+}
+
+// Fixed UserPlaceMustDo model - This is the core of our must-do functionality
+model UserPlaceMustDo {
+  id           String     @id @default(uuid())
+  userId       String
+  placeCacheId String
+  tripId       String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  placeCache   PlaceCache @relation(fields: [placeCacheId], references: [id], onDelete: Cascade)
+  trip         Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, placeCacheId, tripId])
+  @@schema("app_data_embeddings_poc")
 }
