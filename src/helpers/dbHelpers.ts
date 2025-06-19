@@ -1,4 +1,4 @@
-import { PrismaClient, User } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -243,7 +243,7 @@ export const getTripById = async (tripId: string) => {
 
 export const getTripContentData = async (
   tripId: string,
-  userLastLogin: Date | null
+  userLastLogin: Date | null,
 ) => {
   // Fetch all content linked to the trip
   const contentList = await prisma.content.findMany({
@@ -290,23 +290,54 @@ export const getTripContentData = async (
     isNew: userLastLogin ? pin.createdAt > userLastLogin : false,
   }));
 
-  // Fetch all place cache entries related to those pins
+  // Get unique place cache IDs
+  const placeCacheIds = pinsList
+    .map((pin) => pin.placeCacheId)
+    .filter((id): id is string => id !== null);
+
+  // Fetch all place cache entries with mustDo status for current user
   const placeCacheList = await prisma.placeCache.findMany({
     where: {
-      id: {
-        in: pinsList
-          .map((pin) => pin.placeCacheId)
-          .filter((id): id is string => id !== null),
+      id: { in: placeCacheIds },
+    },
+    include: {
+      userPlaceMustDos: {
+        where: {
+          tripId: tripId,
+        },
+        select: {
+          id: true, // Just need to know if it exists
+        },
       },
     },
   });
 
+  // Transform place cache data to include mustDo flag
+  const placeCacheListWithMustDo = placeCacheList.map((place) => ({
+    id: place.id,
+    placeId: place.placeId,
+    lat: place.lat,
+    lng: place.lng,
+    createdAt: place.createdAt,
+    lastCached: place.lastCached,
+    currentOpeningHours: place.currentOpeningHours,
+    name: place.name,
+    rating: place.rating,
+    regularOpeningHours: place.regularOpeningHours,
+    userRatingCount: place.userRatingCount,
+    websiteUri: place.websiteUri,
+    images: place.images,
+    utcOffsetMinutes: place.utcOffsetMinutes,
+    mustDo: place.userPlaceMustDos.length > 0, // True if user has marked this as must-do for this trip
+  }));
+
   return {
     contentList: contentListWithIsNew,
     pinsList: pinsListWithIsNew,
-    placeCacheList,
+    placeCacheList: placeCacheListWithMustDo,
   };
 };
+
 
 export const getContentPinsPlaceNested = async (tripId: string) => {
   // === Fetch Nested Data Separately ===
@@ -332,7 +363,6 @@ export const addUserToTrip = async (
   userId: string, 
   role: string = "member"
 ): Promise<any> => {
-  const prisma = new PrismaClient();
   try {
     // Check if the user is already in the trip
     const existingTripUser = await prisma.tripUser.findUnique({
@@ -542,6 +572,228 @@ export const getTripMemberCount = async (
     return count;
   } catch (error) {
     console.error("Error getting trip member count:", error);
+    throw error;
+  }
+};
+
+
+// Helper function to mark a place as must-do for a user in a trip
+export const markPlaceAsMustDo = async (
+  userId: string, 
+  placeCacheId: string,
+  tripId: string
+): Promise<{ alreadyMarked: boolean; entry: any }> => {
+  try {
+    // Check if already marked as must-do
+    const existingEntry = await prisma.userPlaceMustDo.findUnique({
+      where: {
+        userId_placeCacheId_tripId: {
+          userId,
+          placeCacheId,
+          tripId
+        }
+      },
+      include: {
+        placeCache: true,
+        trip: true
+      }
+    });
+
+    if (existingEntry) {
+      return { alreadyMarked: true, entry: existingEntry };
+    }
+
+    // Create new must-do entry
+    const mustDoEntry = await prisma.userPlaceMustDo.create({
+      data: {
+        userId,
+        placeCacheId,
+        tripId
+      },
+      include: {
+        placeCache: true,
+        trip: true
+      }
+    });
+
+    return { alreadyMarked: false, entry: mustDoEntry };
+  } catch (error) {
+    console.error("Error marking place as must-do:", error);
+    throw error;
+  }
+};
+
+// Helper function to unmark a place as must-do for a user in a trip
+export const unmarkPlaceAsMustDo = async (
+  userId: string, 
+  placeCacheId: string,
+  tripId: string
+): Promise<boolean> => {
+  try {
+    const deletedEntry = await prisma.userPlaceMustDo.delete({
+      where: {
+        userId_placeCacheId_tripId: {
+          userId,
+          placeCacheId,
+          tripId
+        }
+      }
+    });
+    return !!deletedEntry;
+  } catch (error) {
+    if ((error as any).code === 'P2025') {
+      // Record not found - it wasn't marked as must-do
+      return false;
+    }
+    console.error("Error unmarking place as must-do:", error);
+    throw error;
+  }
+};
+
+// === Content Management Helper Functions ===
+
+// Helper function to update user notes
+export const updateUserNotes = async (
+  contentId: string, 
+  userNotes: string
+): Promise<any> => {
+  try {
+    const updatedContent = await prisma.content.update({
+      where: { id: contentId },
+      data: { userNotes },
+    });
+    return updatedContent;
+  } catch (error) {
+    console.error("Error updating user notes:", error);
+    throw error;
+  }
+};
+
+// Helper function to delete a pin
+export const deletePin = async (pinId: string): Promise<void> => {
+  try {
+    // Get the pin to know which content it belongs to
+    const pin = await prisma.pin.findUnique({
+      where: { id: pinId },
+      select: { contentId: true }
+    });
+
+    if (!pin) {
+      throw new Error("Pin not found");
+    }
+
+    // Delete the pin
+    await prisma.pin.delete({
+      where: { id: pinId },
+    });
+
+    // Update the pins count in the associated content
+    const remainingPinsCount = await prisma.pin.count({
+      where: { contentId: pin.contentId }
+    });
+
+    await prisma.content.update({
+      where: { id: pin.contentId },
+      data: { pins_count: remainingPinsCount }
+    });
+
+  } catch (error) {
+    console.error("Error deleting pin:", error);
+    throw error;
+  }
+};
+
+// === Verification Helper Functions ===
+
+
+// Helper function to verify if a place exists
+export const verifyPlaceExists = async (placeCacheId: string): Promise<boolean> => {
+  try {
+    const place = await prisma.placeCache.findUnique({
+      where: { id: placeCacheId }
+    });
+    return !!place;
+  } catch (error) {
+    console.error("Error verifying place exists:", error);
+    throw error;
+  }
+};
+
+// Helper function to verify if a trip exists
+export const verifyTripExists = async (tripId: string): Promise<boolean> => {
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: tripId }
+    });
+    return !!trip;
+  } catch (error) {
+    console.error("Error verifying trip exists:", error);
+    throw error;
+  }
+};
+
+// Helper function to verify user has access to content
+export const verifyContentAccess = async (
+  contentId: string,
+  userId: string
+): Promise<boolean> => {
+  try {
+    const content = await prisma.content.findUnique({
+      where: { id: contentId },
+      include: {
+        trip: {
+          include: {
+            tripUsers: {
+              where: { userId: userId }
+            }
+          }
+        }
+      }
+    });
+
+    if (!content) {
+      return false;
+    }
+
+    // Check if user has access to this content through trip membership
+    return content.trip.tripUsers.length > 0;
+  } catch (error) {
+    console.error("Error verifying content access:", error);
+    throw error;
+  }
+};
+
+// Helper function to verify user has access to pin
+export const verifyPinAccess = async (
+  pinId: string,
+  userId: string
+): Promise<boolean> => {
+  try {
+    const pin = await prisma.pin.findUnique({
+      where: { id: pinId },
+      include: {
+        content: {
+          include: {
+            trip: {
+              include: {
+                tripUsers: {
+                  where: { userId: userId }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!pin) {
+      return false;
+    }
+
+    // Check if user has access to this pin through trip membership
+    return pin.content.trip.tripUsers.length > 0;
+  } catch (error) {
+    console.error("Error verifying pin access:", error);
     throw error;
   }
 };
