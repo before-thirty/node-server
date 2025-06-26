@@ -136,6 +136,24 @@ export const getTripsByUserId = async (userId: string) => {
   }
 };
 
+
+export const getPublicTrips = async () => {
+    const publicTrips = await prisma.trip.findMany({
+      where: { isPublic: true }, 
+      select: {
+        id: true,
+        name: true,
+        startDate: true,
+        endDate: true,
+        description: true,
+        coverImage: true,
+        likes: true,
+        viewCount: true
+      },
+    });
+    return publicTrips;
+};
+
 export interface UserModel {
   id: string;
   name: string;

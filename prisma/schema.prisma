@@ -17,8 +17,8 @@ model User {
   firebaseId  String
   Message     ChatMessage[]
   contents    Content[]
-  tripUsers   TripUser[]
   ShareToken  ShareToken[]
+  tripUsers   TripUser[]
 }
 
 model Trip {
@@ -30,6 +30,10 @@ model Trip {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   lastContentId String?
+  coverImage    String?
+  isPublic      Boolean       @default(false)
+  likes         Int?          @default(0)
+  viewCount     Int?          @default(0)
   Message       ChatMessage[]
   contents      Content[]
   ShareToken    ShareToken[]
@@ -43,8 +47,8 @@ model TripUser {
   userId    String
   role      String
   createdAt DateTime @default(now())
-  trip      Trip     @relation(fields: [tripId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tripId, userId])
 }
@@ -61,9 +65,9 @@ model Content {
   userNotes                  String?
   pins_count                 Int      @default(0)
   thumbnail                  String   @default("")
-  title                    String   @default("")
-  trip                       Trip     @relation(fields: [tripId], references: [id])
-  user                       User     @relation(fields: [userId], references: [id])
+  title                      String   @default("")
+  trip                       Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   pins                       Pin[]
   unusedTripsWithLastContent Trip[]   @relation("LastContent")
 }
@@ -77,8 +81,8 @@ model Pin {
   placeCacheId String?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
-  content      Content     @relation(fields: [contentId], references: [id])
-  placeCache   PlaceCache? @relation(fields: [placeCacheId], references: [id])
+  content      Content     @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  placeCache   PlaceCache? @relation(fields: [placeCacheId], references: [id], onDelete: Cascade)
 }
 
 model PlaceCache {
@@ -95,8 +99,8 @@ model PlaceCache {
   userRatingCount     Int?
   websiteUri          String?
   images              String[]
+  utcOffsetMinutes    Int?
   pins                Pin[]
-  utcOffsetMinutes Int?
 }
 
 model ChatMessage {
@@ -109,7 +113,7 @@ model ChatMessage {
   fileName  String?
   tripId    String
   trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ShareToken {
@@ -119,6 +123,6 @@ model ShareToken {
   createdBy String
   createdAt DateTime @default(now())
   expiresAt DateTime
+  user      User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [createdBy], references: [id])
 }
