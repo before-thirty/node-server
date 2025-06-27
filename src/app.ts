@@ -392,6 +392,32 @@ app.post("/api/users", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+app.post("/api/signin-with-apple", async (req, res) => {
+  const { firebaseId, name, email, phoneNumber } = UserSchema.parse(req.body);
+  const prisma = new PrismaClient();
+  
+  try {
+    let user = await getUserByFirebaseId(firebaseId);
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          firebaseId,
+          name,
+          email,
+          phoneNumber: phoneNumber || "", // Apple doesn't always provide phone number
+        },
+      });
+    }
+    
+    const trips = await getTripsByUserId(user.id);
+    const currentTripId = trips[0]?.id;
+    res.status(200).json({ ...user, currentTripId });
+  } catch (error) {
+    console.error("Error in apple sign-in:", error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});
+
 app.post("/api/signin-with-google", async (req, res) => {
   const { firebaseId, name, email, phoneNumber } = UserSchema.parse(req.body);
   const prisma = new PrismaClient();
