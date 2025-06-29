@@ -46,7 +46,8 @@ import {
   verifyPlaceExists,
   verifyTripExists,
   verifyContentAccess,
-  verifyPinAccess
+  verifyPinAccess,
+  getPublicTrips
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "./middleware/currentUser";
@@ -88,15 +89,14 @@ const UserSchema = z.object({
 const ContentSchema = z.object({
   url: z.string().url(),
   content: z.string().optional(),
-  trip_id: z.string().uuid(),
-  user_notes: z.string().optional(),
-  user_id: z.string().uuid(),
+  trip_id: z.string(),
+  user_notes: z.string().optional()
 });
 
 const UserTripSchema = z.object({
   role: z.string(),
   user_id: z.string().uuid(),
-  trip_id: z.string().uuid(),
+  trip_id: z.string()
 });
 
 app.get("/api/status", async (req: Request, res: Response) => {
@@ -114,12 +114,17 @@ app.post(
     try {
       const currentUser = req.currentUser;
       if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
         throw new Error("User not authenticated");
+
       }
       const user_id = currentUser.id;
+      console.log(req.body);
       const validatedData = ContentSchema.parse(req.body);
+      console.log(req.body);
       const { url, content, trip_id, user_notes } = validatedData;
 
+      console.log(`Received request to extract lat-long: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`);
       req.logger?.info(
         `Request received: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`
       );
@@ -336,6 +341,65 @@ app.get(
   }
 );
 
+app.post(
+  "/api/user-trips",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        throw new Error("User not authenticated");
+      }
+      const { id } = currentUser;
+      const trips = await getTripsByUserId(id);
+      if (trips.length === 0) {
+        res.status(404).json({ error: "No trips found for the given user." });
+        return;
+      }
+      res.status(200).json(trips);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        console.error(`Error fetching trips:`, error);
+        res.status(500).json({ error: "Internal server error." });
+      }
+    }
+  }
+);
+
+
+app.get(
+  "/api/public-trips",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        throw new Error("User not authenticated");
+      }
+
+      const trips = await getPublicTrips();
+      if (trips.length === 0) {
+        res.status(404).json({ error: "No Public trips found." });
+        return;
+      }
+      res.status(200).json(trips);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        console.error(`Error fetching trips:`, error);
+        res.status(500).json({ error: "Internal server error." });
+      }
+    }
+  }
+);
+
+
+
+
 app.get("/api/health", async (req: Request, res: Response) => {
   res.status(200).json({
     status: "ok",
@@ -383,6 +447,31 @@ app.post("/api/signin-with-google", async (req, res) => {
   } catch (error) {
     console.error("Error in get-or-create-user:", error);
     res.status(500).json({ error: "Something went wrong" });
+  }
+});
+
+app.delete("/api/delete-user",
+  authenticate,
+  async (req, res) => {
+
+  const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        throw new Error("User not authenticated");
+  }
+
+  const prisma = new PrismaClient();
+  try {
+  // delete user 
+
+  await prisma.user.delete({
+        where: { id: currentUser.id },
+  });
+  res.status(200).json({msg: "User deleted"});
+  } 
+  catch (error) {
+    console.error("Error in deleting user:", error);
+    res.status(500).json({ error });
   }
 });
 
@@ -448,7 +537,7 @@ app.post(
 
 // Zod schema for validating tripId
 const tripIdSchema = z.object({
-  tripId: z.string().uuid(),
+  tripId: z.string()
 });
 // Query parameters schema
 const tripContentQuerySchema = z.object({
@@ -1089,3 +1178,6 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+
+
