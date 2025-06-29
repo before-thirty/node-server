@@ -25,6 +25,7 @@
         "openai": "^4.79.1",
         "prisma": "^6.3.0",
         "uuid": "^9.0.1",
+        "winston": "^3.13.0",
         "zod": "^3.24.1"
     },
     "devDependencies": {
