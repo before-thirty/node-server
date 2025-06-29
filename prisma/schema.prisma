@@ -8,7 +8,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["app_data_embeddings_poc"]
+  schemas  = ["app_data"]
 }
 
 model User {
@@ -25,7 +25,7 @@ model User {
   ShareToken      ShareToken[]
   userPlaceMustDos UserPlaceMustDo[] // Fixed naming to be plural and consistent
 
-  @@schema("app_data_embeddings_poc")
+  @@schema("app_data")
 }
 
 model Trip {
@@ -44,7 +44,7 @@ model Trip {
   tripUsers        TripUser[]
   userPlaceMustDos UserPlaceMustDo[]  // Added relation to must-do places in this trip
 
-  @@schema("app_data_embeddings_poc")
+  @@schema("app_data")
 }
 
 model TripUser {
@@ -57,7 +57,7 @@ model TripUser {
   user      User     @relation(fields: [userId], references: [id])
 
   @@unique([tripId, userId])
-  @@schema("app_data_embeddings_poc")
+  @@schema("app_data")
 }
 
 model Content {
@@ -86,7 +86,7 @@ model Content {
   pins                       Pin[]
   unusedTripsWithLastContent Trip[]   @relation("LastContent")
 
-  @@schema("app_data_embeddings_poc")
+  @@schema("app_data")
 }
 
 model Pin {
@@ -102,7 +102,7 @@ model Pin {
   placeCache   PlaceCache? @relation(fields: [placeCacheId], references: [id])
   // Removed userPlaceMustDo relation from Pin since it should be on PlaceCache
 
-  @@schema("app_data_embeddings_poc")
+  @@schema("app_data")
 }
 
 model PlaceCache {
@@ -123,7 +123,7 @@ model PlaceCache {
   utcOffsetMinutes    Int?
   userPlaceMustDos    UserPlaceMustDo[]  // Added relation to users who marked this place as must-do
 
-  @@schema("app_data_embeddings_poc")
+  @@schema("app_data")
 }
 
 model ChatMessage {
@@ -138,7 +138,7 @@ model ChatMessage {
   trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id])
 
-  @@schema("app_data_embeddings_poc")
+  @@schema("app_data")
 }
 
 model ShareToken {
@@ -151,7 +151,7 @@ model ShareToken {
   trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [createdBy], references: [id])
 
-  @@schema("app_data_embeddings_poc")
+  @@schema("app_data")
 }
 
 // Fixed UserPlaceMustDo model - This is the core of our must-do functionality
@@ -167,5 +167,5 @@ model UserPlaceMustDo {
   trip         Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
   
   @@unique([userId, placeCacheId, tripId])
-  @@schema("app_data_embeddings_poc")
+  @@schema("app_data")
 }

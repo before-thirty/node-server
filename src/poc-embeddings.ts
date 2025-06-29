@@ -131,7 +131,7 @@ export async function generateContentEmbeddings(contentId: string): Promise<void
     
     if (updates.title_embedding) {
       await prismaPoc.$executeRawUnsafe(`
-        UPDATE app_data_embeddings_poc."Content" 
+        UPDATE app_data."Content" 
         SET title_embedding = $1::vector
         WHERE id = $2
       `, updates.title_embedding, contentId);
@@ -139,7 +139,7 @@ export async function generateContentEmbeddings(contentId: string): Promise<void
     
     if (updates.raw_data_embedding) {
       await prismaPoc.$executeRawUnsafe(`
-        UPDATE app_data_embeddings_poc."Content" 
+        UPDATE app_data."Content" 
         SET raw_data_embedding = $1::vector
         WHERE id = $2
       `, updates.raw_data_embedding, contentId);
@@ -147,7 +147,7 @@ export async function generateContentEmbeddings(contentId: string): Promise<void
     
     if (updates.user_notes_embedding) {
       await prismaPoc.$executeRawUnsafe(`
-        UPDATE app_data_embeddings_poc."Content" 
+        UPDATE app_data."Content" 
         SET user_notes_embedding = $1::vector
         WHERE id = $2
       `, updates.user_notes_embedding, contentId);
@@ -155,7 +155,7 @@ export async function generateContentEmbeddings(contentId: string): Promise<void
     
     if (updates.structured_data_embedding) {
       await prismaPoc.$executeRawUnsafe(`
-        UPDATE app_data_embeddings_poc."Content" 
+        UPDATE app_data."Content" 
         SET structured_data_embedding = $1::vector
         WHERE id = $2
       `, updates.structured_data_embedding, contentId);
@@ -163,7 +163,7 @@ export async function generateContentEmbeddings(contentId: string): Promise<void
     
     // Update the timestamp separately
     await prismaPoc.$executeRawUnsafe(`
-      UPDATE app_data_embeddings_poc."Content" 
+      UPDATE app_data."Content" 
       SET last_embedding_update = $1
       WHERE id = $2
     `, updates.last_embedding_update, contentId);
@@ -176,6 +176,101 @@ export async function generateContentEmbeddings(contentId: string): Promise<void
   }
 }
 
+export async function processAllContentAggressive(
+  batchSize: number = 20,
+  delayMs: number = 200, // Shorter delay
+  maxConcurrentBatches: number = 5, // More concurrent batches
+  maxConcurrentItems: number = 3 // Process items within batch in parallel too
+): Promise<void> {
+  console.log('🚀 Starting aggressive parallel batch processing...');
+  
+  const allContentResult = await prismaPoc.$queryRaw`
+    SELECT id, title
+    FROM app_data."Content"
+    WHERE title_embedding IS NULL
+    AND raw_data_embedding IS NULL
+    AND user_notes_embedding IS NULL
+    AND structured_data_embedding IS NULL
+    ORDER BY "createdAt" DESC
+  `;
+  
+  const allContent = allContentResult as Array<{id: string, title: string}>;
+  console.log(`📊 Found ${allContent.length} content items to process`);
+  
+  if (allContent.length === 0) {
+    console.log('✅ All content already has embeddings!');
+    return;
+  }
+
+  const batches: Array<{id: string, title: string}>[] = [];
+  for (let i = 0; i < allContent.length; i += batchSize) {
+    batches.push(allContent.slice(i, i + batchSize));
+  }
+
+  let processedCount = 0;
+  let successCount = 0;
+
+  // Process batches in parallel chunks
+  for (let i = 0; i < batches.length; i += maxConcurrentBatches) {
+    const concurrentBatches = batches.slice(i, i + maxConcurrentBatches);
+    
+    console.log(`\n🔄 Processing batches ${i + 1}-${Math.min(i + maxConcurrentBatches, batches.length)} of ${batches.length}...`);
+
+    const batchPromises = concurrentBatches.map(async (batch, localIndex) => {
+      const globalBatchIndex = i + localIndex;
+      let batchSuccessCount = 0;
+      let batchFailedCount = 0;
+
+      // Process items within batch in parallel too (more aggressive)
+      for (let j = 0; j < batch.length; j += maxConcurrentItems) {
+        const itemChunk = batch.slice(j, j + maxConcurrentItems);
+        
+        await Promise.all(
+          itemChunk.map(async (content) => {
+            try {
+              await generateContentEmbeddings(content.id);
+              batchSuccessCount++;
+            } catch (error) {
+              console.error(`❌ Batch ${globalBatchIndex + 1} - Failed to process content ${content.id}:`, error);
+              batchFailedCount++;
+            }
+          })
+        );
+        
+        // Small delay between item chunks within the same batch
+        if (j + maxConcurrentItems < batch.length) {
+          await new Promise(resolve => setTimeout(resolve, delayMs / 4));
+        }
+      }
+
+      console.log(`✅ Batch ${globalBatchIndex + 1} completed: ${batchSuccessCount} successful, ${batchFailedCount} failed`);
+      
+      return {
+        success: batchSuccessCount,
+        failed: batchFailedCount
+      };
+    });
+
+    const batchResults = await Promise.all(batchPromises);
+    
+    for (const result of batchResults) {
+      successCount += result.success;
+      processedCount += result.success + result.failed;
+    }
+
+    console.log(`📈 Progress: ${processedCount}/${allContent.length} (${successCount} successful)`);
+
+    if (i + maxConcurrentBatches < batches.length) {
+      console.log(`⏸️ Waiting ${delayMs}ms before next parallel batch chunk...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+
+  console.log(`\n🎉 Aggressive parallel processing completed!`);
+  console.log(`📊 Total processed: ${processedCount}`);
+  console.log(`✅ Successful: ${successCount}`);
+  console.log(`❌ Failed: ${processedCount - successCount}`);
+}
 /**
  * Batch process all content without embeddings
  */
@@ -188,7 +283,7 @@ export async function processAllContent(
   // Get all content that needs embeddings using raw SQL
   const allContentResult = await prismaPoc.$queryRaw`
     SELECT id, title 
-    FROM app_data_embeddings_poc."Content" 
+    FROM app_data."Content" 
     WHERE title_embedding IS NULL 
       AND raw_data_embedding IS NULL 
       AND user_notes_embedding IS NULL 
@@ -303,7 +398,7 @@ export async function pocSemanticSearch(
           THEN 1 - (structured_data_embedding <=> $${params.length + 1}::vector) 
           ELSE 0 
         END as structured_data_similarity
-      FROM app_data_embeddings_poc."Content" 
+      FROM app_data."Content" 
       WHERE ${whereClause}
         AND (
           title_embedding IS NOT NULL OR 
@@ -342,31 +437,31 @@ export async function getEmbeddingStats(): Promise<any> {
   // Since we can't use Prisma filters for vector columns, we'll use raw SQL
   const withTitleEmbedding = await prismaPoc.$queryRaw`
     SELECT COUNT(*) as count 
-    FROM app_data_embeddings_poc."Content" 
+    FROM app_data."Content" 
     WHERE title_embedding IS NOT NULL
   `;
   
   const withRawDataEmbedding = await prismaPoc.$queryRaw`
     SELECT COUNT(*) as count 
-    FROM app_data_embeddings_poc."Content" 
+    FROM app_data."Content" 
     WHERE raw_data_embedding IS NOT NULL
   `;
   
   const withUserNotesEmbedding = await prismaPoc.$queryRaw`
     SELECT COUNT(*) as count 
-    FROM app_data_embeddings_poc."Content" 
+    FROM app_data."Content" 
     WHERE user_notes_embedding IS NOT NULL
   `;
   
   const withStructuredDataEmbedding = await prismaPoc.$queryRaw`
     SELECT COUNT(*) as count 
-    FROM app_data_embeddings_poc."Content" 
+    FROM app_data."Content" 
     WHERE structured_data_embedding IS NOT NULL
   `;
 
   const withAnyEmbedding = await prismaPoc.$queryRaw`
     SELECT COUNT(*) as count 
-    FROM app_data_embeddings_poc."Content" 
+    FROM app_data."Content" 
     WHERE title_embedding IS NOT NULL 
        OR raw_data_embedding IS NOT NULL 
        OR user_notes_embedding IS NOT NULL 

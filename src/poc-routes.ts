@@ -5,6 +5,7 @@ import {
   processAllContent,
   generateContentEmbeddings,
   pocSemanticSearch,
+  processAllContentAggressive,
 } from "./poc-embeddings";
 
 import { PrismaClient } from "@prisma/client";
@@ -34,7 +35,7 @@ router.post("/poc/generate-all-embeddings", async (req: Request, res: Response) 
     });
 
     // Start processing in background
-    processAllContent(20, 500)
+    processAllContentAggressive(20, 100)
       .then(() => {
         console.log("🎉 All embeddings generated successfully!");
       })
