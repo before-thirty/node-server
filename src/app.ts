@@ -54,6 +54,7 @@ import { authenticate } from "./middleware/currentUser";
 import { getDummyStartAndEndDate } from "./utils/jsUtils";
 import pocRoutes from "./poc-routes";
 import { generateContentEmbeddings } from "./poc-embeddings";
+import cronRoutes from "./cronRoutes";
 
 
 dotenv.config();
@@ -66,6 +67,7 @@ app.use(bodyParser.json());
 app.use(morgan("dev"));
 
 app.use('/api', pocRoutes); // POC semantic search routes
+app.use('/cron', cronRoutes);
 
 
 const getMetadata = async (url: string) => {
