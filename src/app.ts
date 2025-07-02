@@ -36,14 +36,25 @@ import {
   getUsername,
   getShareTokenDetails,
   createShareToken,
-  isUserInTrip,
   generateUniqueToken,
   getTripMemberCount,
+  markPlaceAsMustDo,
+  unmarkPlaceAsMustDo,
+  updateUserNotes,
+  deletePin,
+  isUserInTrip,
+  verifyPlaceExists,
+  verifyTripExists,
+  verifyContentAccess,
+  verifyPinAccess,
   getPublicTrips
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "./middleware/currentUser";
 import { getDummyStartAndEndDate } from "./utils/jsUtils";
+import pocRoutes from "./poc-routes";
+import { generateContentEmbeddings } from "./poc-embeddings";
+
 
 dotenv.config();
 
@@ -53,6 +64,9 @@ app.use(requestLogger);
 app.use(cors());
 app.use(bodyParser.json());
 app.use(morgan("dev"));
+
+app.use('/api', pocRoutes); // POC semantic search routes
+
 
 const getMetadata = async (url: string) => {
   try {
@@ -98,7 +112,6 @@ app.post(
   authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      // Validate the request body using Zod
       const currentUser = req.currentUser;
       if (currentUser == null) {
         res.status(401).json({ error: "User not authenticated" });
@@ -169,6 +182,23 @@ app.post(
         `Updated content entry with structured data ${newContent.id}`
       );
 
+      // Generate embeddings for the new content in the background
+      try {
+        console.log(`🔄 Starting embedding generation for new content ${newContent.id}...`);
+        generateContentEmbeddings(newContent.id)
+          .then(() => {
+            console.log(`✅ Embeddings generated successfully for content ${newContent.id}`);
+          })
+          .catch((embeddingError) => {
+            console.error(`❌ Failed to generate embeddings for content ${newContent.id}:`, embeddingError);
+            // Don't throw here - embedding generation failure shouldn't affect the main flow
+          });
+      } catch (embeddingError) {
+        console.error(`❌ Error starting embedding generation for content ${newContent.id}:`, embeddingError);
+        // Continue with the main flow even if embedding generation fails
+      }
+
+      // ... rest of the pin processing logic remains the same ...
       // Process each analysis object in the list
       const responses = await Promise.all(
         analysis.map(async (analysis) => {
@@ -263,7 +293,7 @@ app.post(
               currentOpeningHours: placeCache.currentOpeningHours,
               regularOpeningHours: placeCache.regularOpeningHours,
               images: placeCache.images,
-              utcOffsetMinutes: placeCache.utcOffsetMinutes, // Add this line
+              utcOffsetMinutes: placeCache.utcOffsetMinutes,
             },
           };
         })
@@ -939,6 +969,236 @@ app.post(
     }
   }
 );
+
+
+
+// Zod schemas for validation
+const MustDoPlaceSchema = z.object({
+  placeCacheId: z.string().uuid(),
+  tripId: z.string().uuid(),
+});
+
+const EditUserNotesSchema = z.object({
+  contentId: z.string().uuid(),
+  userNotes: z.string(),
+});
+
+const DeletePinSchema = z.object({
+  pinId: z.string().uuid(),
+});
+
+// API to mark a place as must-do for a trip
+app.post(
+  "/api/mark-place-must-do",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { placeCacheId, tripId } = MustDoPlaceSchema.parse(req.body);
+
+      // Verify user has access to this trip
+      const userInTrip = await isUserInTrip(currentUser.id, tripId);
+      if (!userInTrip) {
+        res.status(403).json({ error: "You don't have access to this trip" });
+        return;
+      }
+
+      // Verify the place exists
+      const placeExists = await verifyPlaceExists(placeCacheId);
+      if (!placeExists) {
+        res.status(404).json({ error: "Place not found" });
+        return;
+      }
+
+      // Verify the trip exists
+      const tripExists = await verifyTripExists(tripId);
+      if (!tripExists) {
+        res.status(404).json({ error: "Trip not found" });
+        return;
+      }
+
+      // Mark place as must-do
+      const result = await markPlaceAsMustDo(currentUser.id, placeCacheId, tripId);
+
+      req.logger?.info(`Place ${placeCacheId} marked as must-do by user ${currentUser.id} for trip ${tripId}`);
+      
+      if (result.alreadyMarked) {
+        res.status(200).json({
+          success: true,
+          message: "Place is already marked as must-do",
+          alreadyMarked: true,
+          mustDoEntry: result.entry
+        });
+      } else {
+        res.status(201).json({
+          success: true,
+          message: "Place marked as must-do successfully",
+          mustDoEntry: result.entry
+        });
+      }
+
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: "Invalid input data", details: error.errors });
+      } else {
+        console.error("Error marking place as must-do:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
+// API to unmark a place as must-do for a trip
+app.delete(
+  "/api/unmark-place-must-do",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { placeCacheId, tripId } = MustDoPlaceSchema.parse(req.body);
+
+      // Verify user has access to this trip
+      const userInTrip = await isUserInTrip(currentUser.id, tripId);
+      if (!userInTrip) {
+        res.status(403).json({ error: "You don't have access to this trip" });
+        return;
+      }
+
+      // Unmark place as must-do
+      const success = await unmarkPlaceAsMustDo(currentUser.id, placeCacheId, tripId);
+
+      if (!success) {
+        res.status(404).json({
+          success: false,
+          message: "Place is not marked as must-do"
+        });
+        return;
+      }
+
+      req.logger?.info(`Place ${placeCacheId} unmarked as must-do by user ${currentUser.id} for trip ${tripId}`);
+      res.status(200).json({
+        success: true,
+        message: "Place unmarked as must-do successfully"
+      });
+
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: "Invalid input data", details: error.errors });
+      } else {
+        console.error("Error unmarking place as must-do:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
+// API to edit user notes
+app.put(
+  "/api/edit-user-notes",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { contentId, userNotes } = EditUserNotesSchema.parse(req.body);
+
+      const hasAccess = await verifyContentAccess(contentId, currentUser.id);
+      if (!hasAccess) {
+        res.status(403).json({ error: "You don't have access to this content" });
+        return;
+      }
+
+      const updatedContent = await updateUserNotes(contentId, userNotes);
+
+      // Regenerate embeddings for the updated content in the background
+      try {
+        console.log(`Regenerating embeddings for updated content ${contentId}...`);
+        generateContentEmbeddings(contentId)
+          .then(() => {
+            console.log(`✅ Embeddings regenerated successfully for content ${contentId}`);
+          })
+          .catch((embeddingError) => {
+            console.error(`Failed to regenerate embeddings for content ${contentId}:`, embeddingError);
+          });
+      } catch (embeddingError) {
+        console.error(`Error starting embedding regeneration for content ${contentId}:`, embeddingError);
+      }
+
+      req.logger?.info(`User notes updated for content ${contentId} by user ${currentUser.id}`);
+      res.status(200).json({
+        success: true,
+        message: "User notes updated successfully",
+        content: updatedContent
+      });
+
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: "Invalid input data", details: error.errors });
+      } else {
+        console.error("Error updating user notes:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
+// API to delete a pin
+app.delete(
+  "/api/delete-pin",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { pinId } = DeletePinSchema.parse(req.body);
+
+      // Verify user has access to this pin
+      const hasAccess = await verifyPinAccess(pinId, currentUser.id);
+      if (!hasAccess) {
+        res.status(403).json({ error: "You don't have access to this pin" });
+        return;
+      }
+
+      // Delete the pin
+      await deletePin(pinId);
+
+      req.logger?.info(`Pin ${pinId} deleted by user ${currentUser.id}`);
+      res.status(200).json({
+        success: true,
+        message: "Pin deleted successfully"
+      });
+
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: "Invalid input data", details: error.errors });
+      } else {
+        console.error("Error deleting pin:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
+
+
 // Start the server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
