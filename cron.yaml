@@ -1,0 +1,8 @@
+cron:
+- description: "Daily image URL refresh"
+  url: /cron/refresh-images
+  schedule: every day 02:00
+  timezone: UTC
+
+
+# gcloud app deploy cron.yaml
