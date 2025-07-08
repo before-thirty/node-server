@@ -1,8 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-import { v4 as uuidv4 } from 'uuid';
-
-
+import { v4 as uuidv4 } from "uuid";
 
 const prisma = new PrismaClient();
 
@@ -136,22 +134,21 @@ export const getTripsByUserId = async (userId: string) => {
   }
 };
 
-
 export const getPublicTrips = async () => {
-    const publicTrips = await prisma.trip.findMany({
-      where: { isPublic: true }, 
-      select: {
-        id: true,
-        name: true,
-        startDate: true,
-        endDate: true,
-        description: true,
-        coverImage: true,
-        likes: true,
-        viewCount: true
-      },
-    });
-    return publicTrips;
+  const publicTrips = await prisma.trip.findMany({
+    where: { isPublic: true },
+    select: {
+      id: true,
+      name: true,
+      startDate: true,
+      endDate: true,
+      description: true,
+      coverImage: true,
+      likes: true,
+      viewCount: true,
+    },
+  });
+  return publicTrips;
 };
 
 export interface UserModel {
@@ -262,6 +259,7 @@ export const getTripById = async (tripId: string) => {
 export const getTripContentData = async (
   tripId: string,
   userLastLogin: Date | null,
+  currentUserId: string
 ) => {
   // Fetch all content linked to the trip
   const contentList = await prisma.content.findMany({
@@ -330,6 +328,25 @@ export const getTripContentData = async (
     },
   });
 
+  const myMustDoPlaceIds = await prisma.userPlaceMustDo.findMany({
+    where: {
+      tripId: tripId,
+      userId: currentUserId,
+    },
+    select: {
+      placeCacheId: true,
+    },
+  });
+
+  // Create a Set for O(1) lookup
+  const mustDoPlaceIdSet = new Set(
+    myMustDoPlaceIds.map((item) => item.placeCacheId)
+  );
+
+  const myMustDoPinIds = pinsList
+    .filter((pin) => pin.placeCacheId && mustDoPlaceIdSet.has(pin.placeCacheId))
+    .map((pin) => pin.id);
+
   // Transform place cache data to include mustDo flag
   const placeCacheListWithMustDo = placeCacheList.map((place) => ({
     id: place.id,
@@ -353,9 +370,9 @@ export const getTripContentData = async (
     contentList: contentListWithIsNew,
     pinsList: pinsListWithIsNew,
     placeCacheList: placeCacheListWithMustDo,
+    myMustDoPinIds: myMustDoPinIds,
   };
 };
-
 
 export const getContentPinsPlaceNested = async (tripId: string) => {
   // === Fetch Nested Data Separately ===
@@ -377,8 +394,8 @@ export const getContentPinsPlaceNested = async (tripId: string) => {
 };
 
 export const addUserToTrip = async (
-  tripId: string, 
-  userId: string, 
+  tripId: string,
+  userId: string,
   role: string = "member"
 ): Promise<any> => {
   try {
@@ -387,23 +404,23 @@ export const addUserToTrip = async (
       where: {
         tripId_userId: {
           tripId,
-          userId
-        }
-      }
+          userId,
+        },
+      },
     });
-    
+
     if (existingTripUser) {
       return existingTripUser;
     }
-    
+
     const tripUser = await prisma.tripUser.create({
       data: {
         tripId,
         userId,
-        role
-      }
+        role,
+      },
     });
-    
+
     return tripUser;
   } catch (error) {
     console.error("Error adding user to trip:", error);
@@ -499,13 +516,11 @@ export const getUsersByIds = async (userIds: string[]) => {
   });
 };
 
-
-
 // === Share Token Helper Functions ===
 
 // Function to generate a unique token
 export const generateUniqueToken = (): string => {
-  return uuidv4().replace(/-/g, '');
+  return uuidv4().replace(/-/g, "");
 };
 
 // Function to create a share token in the database
@@ -518,16 +533,16 @@ export const createShareToken = async (
     // Set expiration to 7 days from now
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
-    
+
     const shareToken = await prisma.shareToken.create({
       data: {
         token,
         tripId,
         createdBy: userId,
-        expiresAt
-      }
+        expiresAt,
+      },
     });
-    
+
     return shareToken;
   } catch (error) {
     console.error("Error creating share token:", error);
@@ -536,19 +551,17 @@ export const createShareToken = async (
 };
 
 // Function to get share token details by token
-export const getShareTokenDetails = async (
-  token: string
-): Promise<any> => {
+export const getShareTokenDetails = async (token: string): Promise<any> => {
   try {
     const shareToken = await prisma.shareToken.findUnique({
       where: {
-        token
+        token,
       },
       include: {
-        trip: true
-      }
+        trip: true,
+      },
     });
-    
+
     return shareToken;
   } catch (error) {
     console.error("Error fetching share token:", error);
@@ -566,11 +579,11 @@ export const isUserInTrip = async (
       where: {
         tripId_userId: {
           tripId,
-          userId
-        }
-      }
+          userId,
+        },
+      },
     });
-    
+
     return !!tripUser;
   } catch (error) {
     console.error("Error checking if user is in trip:", error);
@@ -579,14 +592,12 @@ export const isUserInTrip = async (
 };
 
 // Function to get the number of members in a trip
-export const getTripMemberCount = async (
-  tripId: string
-): Promise<number> => {
+export const getTripMemberCount = async (tripId: string): Promise<number> => {
   try {
     const count = await prisma.tripUser.count({
-      where: { tripId }
+      where: { tripId },
     });
-    
+
     return count;
   } catch (error) {
     console.error("Error getting trip member count:", error);
@@ -594,10 +605,9 @@ export const getTripMemberCount = async (
   }
 };
 
-
 // Helper function to mark a place as must-do for a user in a trip
 export const markPlaceAsMustDo = async (
-  userId: string, 
+  userId: string,
   placeCacheId: string,
   tripId: string
 ): Promise<{ alreadyMarked: boolean; entry: any }> => {
@@ -608,13 +618,13 @@ export const markPlaceAsMustDo = async (
         userId_placeCacheId_tripId: {
           userId,
           placeCacheId,
-          tripId
-        }
+          tripId,
+        },
       },
       include: {
         placeCache: true,
-        trip: true
-      }
+        trip: true,
+      },
     });
 
     if (existingEntry) {
@@ -626,12 +636,12 @@ export const markPlaceAsMustDo = async (
       data: {
         userId,
         placeCacheId,
-        tripId
+        tripId,
       },
       include: {
         placeCache: true,
-        trip: true
-      }
+        trip: true,
+      },
     });
 
     return { alreadyMarked: false, entry: mustDoEntry };
@@ -643,7 +653,7 @@ export const markPlaceAsMustDo = async (
 
 // Helper function to unmark a place as must-do for a user in a trip
 export const unmarkPlaceAsMustDo = async (
-  userId: string, 
+  userId: string,
   placeCacheId: string,
   tripId: string
 ): Promise<boolean> => {
@@ -653,13 +663,13 @@ export const unmarkPlaceAsMustDo = async (
         userId_placeCacheId_tripId: {
           userId,
           placeCacheId,
-          tripId
-        }
-      }
+          tripId,
+        },
+      },
     });
     return !!deletedEntry;
   } catch (error) {
-    if ((error as any).code === 'P2025') {
+    if ((error as any).code === "P2025") {
       // Record not found - it wasn't marked as must-do
       return false;
     }
@@ -672,7 +682,7 @@ export const unmarkPlaceAsMustDo = async (
 
 // Helper function to update user notes
 export const updateUserNotes = async (
-  contentId: string, 
+  contentId: string,
   userNotes: string
 ): Promise<any> => {
   try {
@@ -693,7 +703,7 @@ export const deletePin = async (pinId: string): Promise<void> => {
     // Get the pin to know which content it belongs to
     const pin = await prisma.pin.findUnique({
       where: { id: pinId },
-      select: { contentId: true }
+      select: { contentId: true },
     });
 
     if (!pin) {
@@ -707,14 +717,13 @@ export const deletePin = async (pinId: string): Promise<void> => {
 
     // Update the pins count in the associated content
     const remainingPinsCount = await prisma.pin.count({
-      where: { contentId: pin.contentId }
+      where: { contentId: pin.contentId },
     });
 
     await prisma.content.update({
       where: { id: pin.contentId },
-      data: { pins_count: remainingPinsCount }
+      data: { pins_count: remainingPinsCount },
     });
-
   } catch (error) {
     console.error("Error deleting pin:", error);
     throw error;
@@ -723,12 +732,13 @@ export const deletePin = async (pinId: string): Promise<void> => {
 
 // === Verification Helper Functions ===
 
-
 // Helper function to verify if a place exists
-export const verifyPlaceExists = async (placeCacheId: string): Promise<boolean> => {
+export const verifyPlaceExists = async (
+  placeCacheId: string
+): Promise<boolean> => {
   try {
     const place = await prisma.placeCache.findUnique({
-      where: { id: placeCacheId }
+      where: { id: placeCacheId },
     });
     return !!place;
   } catch (error) {
@@ -741,7 +751,7 @@ export const verifyPlaceExists = async (placeCacheId: string): Promise<boolean> 
 export const verifyTripExists = async (tripId: string): Promise<boolean> => {
   try {
     const trip = await prisma.trip.findUnique({
-      where: { id: tripId }
+      where: { id: tripId },
     });
     return !!trip;
   } catch (error) {
@@ -762,11 +772,11 @@ export const verifyContentAccess = async (
         trip: {
           include: {
             tripUsers: {
-              where: { userId: userId }
-            }
-          }
-        }
-      }
+              where: { userId: userId },
+            },
+          },
+        },
+      },
     });
 
     if (!content) {
@@ -795,13 +805,13 @@ export const verifyPinAccess = async (
             trip: {
               include: {
                 tripUsers: {
-                  where: { userId: userId }
-                }
-              }
-            }
-          }
-        }
-      }
+                  where: { userId: userId },
+                },
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!pin) {

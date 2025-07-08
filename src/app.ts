@@ -5,12 +5,19 @@ import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import cors from "cors";
 import { requestLogger } from "./middleware/logger";
-import { extractLocationAndClassify } from "./helpers/openai";
+import {
+  extractLocationAndClassify,
+  classifyPlaceCategory,
+} from "./helpers/openai";
 import parser from "html-metadata-parser";
 import {
   getPlaceId,
   getFullPlaceDetails,
-  getCoordinatesFromPlaceId,
+  searchPlaces,
+  getSessionStats,
+  clearAllSessions,
+  getSessionForUser,
+  getPlaceDetailsFromId,
 } from "./helpers/googlemaps";
 import { z } from "zod";
 import {
@@ -47,7 +54,7 @@ import {
   verifyTripExists,
   verifyContentAccess,
   verifyPinAccess,
-  getPublicTrips
+  getPublicTrips,
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "./middleware/currentUser";
@@ -55,7 +62,7 @@ import { getDummyStartAndEndDate } from "./utils/jsUtils";
 import pocRoutes from "./poc-routes";
 import { generateContentEmbeddings } from "./poc-embeddings";
 import cronRoutes from "./cronRoutes";
-
+import path from "path";
 
 dotenv.config();
 
@@ -66,10 +73,12 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(morgan("dev"));
 
-app.use('/api', pocRoutes); // POC semantic search routes
-app.use('/cron', cronRoutes);
-
-
+app.use("/api", pocRoutes); // POC semantic search routes
+app.use("/cron", cronRoutes);
+// app.use(
+//   "/.well-known",
+//   express.static(path.join(process.cwd(), ".well-known"))
+// );
 const getMetadata = async (url: string) => {
   try {
     const result = await parser(url);
@@ -89,16 +98,16 @@ const UserSchema = z.object({
 });
 
 const ContentSchema = z.object({
-  url: z.string().url(),
+  url: z.string(),
   content: z.string().optional(),
   trip_id: z.string(),
-  user_notes: z.string().optional()
+  user_notes: z.string().optional(),
 });
 
 const UserTripSchema = z.object({
   role: z.string(),
   user_id: z.string().uuid(),
-  trip_id: z.string()
+  trip_id: z.string(),
 });
 
 app.get("/api/status", async (req: Request, res: Response) => {
@@ -118,15 +127,16 @@ app.post(
       if (currentUser == null) {
         res.status(401).json({ error: "User not authenticated" });
         throw new Error("User not authenticated");
-
       }
       const user_id = currentUser.id;
-      console.log(req.body);
       const validatedData = ContentSchema.parse(req.body);
+
       console.log(req.body);
       const { url, content, trip_id, user_notes } = validatedData;
 
-      console.log(`Received request to extract lat-long: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`);
+      console.log(
+        `Received request to extract lat-long: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`
+      );
       req.logger?.info(
         `Request received: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`
       );
@@ -186,21 +196,36 @@ app.post(
 
       // Generate embeddings for the new content in the background
       try {
-        console.log(`🔄 Starting embedding generation for new content ${newContent.id}...`);
+        console.log(
+          `🔄 Starting embedding generation for new content ${newContent.id}...`
+        );
         generateContentEmbeddings(newContent.id)
           .then(() => {
-            console.log(`✅ Embeddings generated successfully for content ${newContent.id}`);
+            console.log(
+              `✅ Embeddings generated successfully for content ${newContent.id}`
+            );
           })
           .catch((embeddingError) => {
-            console.error(`❌ Failed to generate embeddings for content ${newContent.id}:`, embeddingError);
+            console.error(
+              `❌ Failed to generate embeddings for content ${newContent.id}:`,
+              embeddingError
+            );
             // Don't throw here - embedding generation failure shouldn't affect the main flow
           });
       } catch (embeddingError) {
-        console.error(`❌ Error starting embedding generation for content ${newContent.id}:`, embeddingError);
+        console.error(
+          `❌ Error starting embedding generation for content ${newContent.id}:`,
+          embeddingError
+        );
         // Continue with the main flow even if embedding generation fails
       }
 
       // ... rest of the pin processing logic remains the same ...
+      // Arrays to collect all created entities
+      const createdPins: any[] = [];
+      const createdPlaceCaches: any[] = [];
+      const createdContents = [newContent]; // The content we created earlier
+
       // Process each analysis object in the list
       const responses = await Promise.all(
         analysis.map(async (analysis) => {
@@ -231,14 +256,18 @@ app.post(
             );
 
             // Use coordinates from place details instead of separate API call
-            coordinates = placeDetails.location ? {
-              lat: placeDetails.location.latitude,
-              lng: placeDetails.location.longitude
-            } : null;
+            coordinates = placeDetails.location
+              ? {
+                  lat: placeDetails.location.latitude,
+                  lng: placeDetails.location.longitude,
+                }
+              : null;
 
             if (!coordinates) {
               req.logger?.error(`No coordinates found for place: ${full_loc}`);
-              throw new Error(`Could not get coordinates for place: ${full_loc}`);
+              throw new Error(
+                `Could not get coordinates for place: ${full_loc}`
+              );
             }
 
             req.logger?.debug(
@@ -268,6 +297,9 @@ app.post(
             coordinates = { lat: placeCache.lat, lng: placeCache.lng };
           }
 
+          // Add placeCache to array (both existing and newly created)
+          createdPlaceCaches.push(placeCache);
+
           placeCacheId = placeCache.id;
 
           // Step 5: Create Pin linked to PlaceCache
@@ -279,6 +311,10 @@ app.post(
             coordinates: coordinates,
             description: analysis.additional_info ?? "",
           });
+
+          // Add to created pins array
+          createdPins.push(pin);
+
           req.logger?.info(
             `Created Pin - ${pin.id} with content_id - ${newContent.id} and place_id - ${placeCacheId}`
           );
@@ -301,9 +337,14 @@ app.post(
         })
       );
 
-      // Respond with the processed data
-      res.status(200).json(responses);
+      // Respond with arrays of created entities
+      res.status(200).json({
+        pins: createdPins,
+        contents: createdContents,
+        placeCaches: createdPlaceCaches,
+      });
     } catch (error) {
+      console.log("Look at exact error", error);
       if (error instanceof z.ZodError) {
         res
           .status(400)
@@ -370,7 +411,6 @@ app.post(
   }
 );
 
-
 app.get(
   "/api/public-trips",
   authenticate,
@@ -399,9 +439,6 @@ app.get(
   }
 );
 
-
-
-
 app.get("/api/health", async (req: Request, res: Response) => {
   res.status(200).json({
     status: "ok",
@@ -427,7 +464,7 @@ app.post("/api/users", async (req: Request, res: Response): Promise<void> => {
 app.post("/api/signin-with-apple", async (req, res) => {
   const { firebaseId, name, email, phoneNumber } = UserSchema.parse(req.body);
   const prisma = new PrismaClient();
-  
+
   try {
     let user = await getUserByFirebaseId(firebaseId);
     if (!user) {
@@ -440,7 +477,7 @@ app.post("/api/signin-with-apple", async (req, res) => {
         },
       });
     }
-    
+
     const trips = await getTripsByUserId(user.id);
     const currentTripId = trips[0]?.id;
     res.status(200).json({ ...user, currentTripId });
@@ -478,26 +515,22 @@ app.post("/api/signin-with-google", async (req, res) => {
   }
 });
 
-app.delete("/api/delete-user",
-  authenticate,
-  async (req, res) => {
-
+app.delete("/api/delete-user", authenticate, async (req, res) => {
   const currentUser = req.currentUser;
-      if (currentUser == null) {
-        res.status(401).json({ error: "User not authenticated" });
-        throw new Error("User not authenticated");
+  if (currentUser == null) {
+    res.status(401).json({ error: "User not authenticated" });
+    throw new Error("User not authenticated");
   }
 
   const prisma = new PrismaClient();
   try {
-  // delete user 
+    // delete user
 
-  await prisma.user.delete({
-        where: { id: currentUser.id },
-  });
-  res.status(200).json({msg: "User deleted"});
-  } 
-  catch (error) {
+    await prisma.user.delete({
+      where: { id: currentUser.id },
+    });
+    res.status(200).json({ msg: "User deleted" });
+  } catch (error) {
     console.error("Error in deleting user:", error);
     res.status(500).json({ error });
   }
@@ -510,17 +543,19 @@ app.post(
     try {
       const { name, description } = req.body;
       const user = req.currentUser;
-      
+
       if (user == null) {
         throw new Error("User not authenticated");
       }
-      
+
       // Validate that name is not empty
       if (!name || name.trim() === "") {
-        res.status(400).json({ error: "Trip name is required and cannot be empty" });
+        res
+          .status(400)
+          .json({ error: "Trip name is required and cannot be empty" });
         return;
       }
-      
+
       const { startDate, endDate } = getDummyStartAndEndDate();
       const newTrip = await createTripAndTripUser(
         user.id,
@@ -529,7 +564,7 @@ app.post(
         endDate,
         description ?? ""
       );
-      
+
       console.log("Look at new trip", newTrip);
       res.status(201).json(newTrip);
     } catch (error) {
@@ -565,7 +600,7 @@ app.post(
 
 // Zod schema for validating tripId
 const tripIdSchema = z.object({
-  tripId: z.string()
+  tripId: z.string(),
 });
 // Query parameters schema
 const tripContentQuerySchema = z.object({
@@ -591,9 +626,16 @@ app.get(
         ? new Date(userLastLogin * 1000)
         : null;
 
+      // Get current user ID
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
       // Fetch content, pins, and place cache separately
-      const { contentList, pinsList, placeCacheList } =
-        await getTripContentData(tripId, lastLoginDate);
+      const { contentList, pinsList, placeCacheList, myMustDoPinIds } =
+        await getTripContentData(tripId, lastLoginDate, currentUser.id);
       const trip = await getTripById(tripId);
       const nested = await getContentPinsPlaceNested(tripId);
 
@@ -609,6 +651,7 @@ app.get(
         contents: contentList,
         pins: pinsList,
         placeCaches: placeCacheList,
+        myMustDoPinIds,
         nestedData: nested,
         trip,
         users, // TODO: DONT EXPOSE USERS NUMBER AND EMAIL HERE - NEEDS FRONTEND CHANGE TO SO DO LATER
@@ -768,23 +811,23 @@ app.post(
     try {
       const { tripId } = ShareTripSchema.parse(req.body);
       const currentUser = req.currentUser;
-      
+
       if (currentUser == null) {
         res.status(401).json({ error: "User not authenticated" });
         return;
       }
-      
+
       req.logger?.info(
         `Share link request received: tripId=${tripId}, userId=${currentUser.id}`
       );
-      
+
       // Verify the trip exists
       const trip = await getTripById(tripId);
       if (!trip) {
         res.status(404).json({ error: "Trip not found" });
         return;
       }
-      
+
       // Verify the user is part of this trip
       const userInTrip = await isUserInTrip(currentUser.id, tripId);
       if (!userInTrip) {
@@ -793,27 +836,26 @@ app.post(
         });
         return;
       }
-      
+
       // Generate unique token
       const uniqueToken = generateUniqueToken();
-      
+
       // Store token in database
       await createShareToken(uniqueToken, tripId, currentUser.id);
-      
+
       // Create the web URL (instead of custom scheme)
       // This will work in WhatsApp and other messaging apps
       const shareLink = `https://pinspire.co.in/join-trip/${uniqueToken}`;
-      
+
       // Also include the custom scheme as fallback for direct app integration
       const deepLink = `before-thirty://join-trip/${uniqueToken}`;
-      
+
       res.status(200).json({
         success: true,
-        shareLink: shareLink,        // Primary link for sharing
-        deepLink: deepLink,          // Fallback for direct app usage
-        token: uniqueToken           // Token for reference
+        shareLink: shareLink, // Primary link for sharing
+        deepLink: deepLink, // Fallback for direct app usage
+        token: uniqueToken, // Token for reference
       });
-      
     } catch (error) {
       if (error instanceof z.ZodError) {
         res
@@ -972,8 +1014,6 @@ app.post(
   }
 );
 
-
-
 // Zod schemas for validation
 const MustDoPlaceSchema = z.object({
   placeCacheId: z.string().uuid(),
@@ -987,6 +1027,23 @@ const EditUserNotesSchema = z.object({
 
 const DeletePinSchema = z.object({
   pinId: z.string().uuid(),
+});
+
+const SearchPlacesSchema = z.object({
+  query: z.string().min(1, "Search query is required"),
+  location: z
+    .object({
+      lat: z.number(),
+      lng: z.number(),
+    })
+    .optional(),
+  radius: z.number().min(1).max(50000).optional().default(5000), // Default 5km radius
+  type: z.string().optional(), // Optional place type filter
+});
+
+const ManualPinSchema = z.object({
+  placeId: z.string().min(1, "Place ID is required"),
+  tripId: z.string().uuid(),
 });
 
 // API to mark a place as must-do for a trip
@@ -1025,28 +1082,35 @@ app.post(
       }
 
       // Mark place as must-do
-      const result = await markPlaceAsMustDo(currentUser.id, placeCacheId, tripId);
+      const result = await markPlaceAsMustDo(
+        currentUser.id,
+        placeCacheId,
+        tripId
+      );
 
-      req.logger?.info(`Place ${placeCacheId} marked as must-do by user ${currentUser.id} for trip ${tripId}`);
-      
+      req.logger?.info(
+        `Place ${placeCacheId} marked as must-do by user ${currentUser.id} for trip ${tripId}`
+      );
+
       if (result.alreadyMarked) {
         res.status(200).json({
           success: true,
           message: "Place is already marked as must-do",
           alreadyMarked: true,
-          mustDoEntry: result.entry
+          mustDoEntry: result.entry,
         });
       } else {
         res.status(201).json({
           success: true,
           message: "Place marked as must-do successfully",
-          mustDoEntry: result.entry
+          mustDoEntry: result.entry,
         });
       }
-
     } catch (error) {
       if (error instanceof z.ZodError) {
-        res.status(400).json({ error: "Invalid input data", details: error.errors });
+        res
+          .status(400)
+          .json({ error: "Invalid input data", details: error.errors });
       } else {
         console.error("Error marking place as must-do:", error);
         res.status(500).json({ error: "Internal server error" });
@@ -1077,25 +1141,32 @@ app.delete(
       }
 
       // Unmark place as must-do
-      const success = await unmarkPlaceAsMustDo(currentUser.id, placeCacheId, tripId);
+      const success = await unmarkPlaceAsMustDo(
+        currentUser.id,
+        placeCacheId,
+        tripId
+      );
 
       if (!success) {
         res.status(404).json({
           success: false,
-          message: "Place is not marked as must-do"
+          message: "Place is not marked as must-do",
         });
         return;
       }
 
-      req.logger?.info(`Place ${placeCacheId} unmarked as must-do by user ${currentUser.id} for trip ${tripId}`);
+      req.logger?.info(
+        `Place ${placeCacheId} unmarked as must-do by user ${currentUser.id} for trip ${tripId}`
+      );
       res.status(200).json({
         success: true,
-        message: "Place unmarked as must-do successfully"
+        message: "Place unmarked as must-do successfully",
       });
-
     } catch (error) {
       if (error instanceof z.ZodError) {
-        res.status(400).json({ error: "Invalid input data", details: error.errors });
+        res
+          .status(400)
+          .json({ error: "Invalid input data", details: error.errors });
       } else {
         console.error("Error unmarking place as must-do:", error);
         res.status(500).json({ error: "Internal server error" });
@@ -1120,7 +1191,9 @@ app.put(
 
       const hasAccess = await verifyContentAccess(contentId, currentUser.id);
       if (!hasAccess) {
-        res.status(403).json({ error: "You don't have access to this content" });
+        res
+          .status(403)
+          .json({ error: "You don't have access to this content" });
         return;
       }
 
@@ -1128,28 +1201,41 @@ app.put(
 
       // Regenerate embeddings for the updated content in the background
       try {
-        console.log(`Regenerating embeddings for updated content ${contentId}...`);
+        console.log(
+          `Regenerating embeddings for updated content ${contentId}...`
+        );
         generateContentEmbeddings(contentId)
           .then(() => {
-            console.log(`✅ Embeddings regenerated successfully for content ${contentId}`);
+            console.log(
+              `✅ Embeddings regenerated successfully for content ${contentId}`
+            );
           })
           .catch((embeddingError) => {
-            console.error(`Failed to regenerate embeddings for content ${contentId}:`, embeddingError);
+            console.error(
+              `Failed to regenerate embeddings for content ${contentId}:`,
+              embeddingError
+            );
           });
       } catch (embeddingError) {
-        console.error(`Error starting embedding regeneration for content ${contentId}:`, embeddingError);
+        console.error(
+          `Error starting embedding regeneration for content ${contentId}:`,
+          embeddingError
+        );
       }
 
-      req.logger?.info(`User notes updated for content ${contentId} by user ${currentUser.id}`);
+      req.logger?.info(
+        `User notes updated for content ${contentId} by user ${currentUser.id}`
+      );
       res.status(200).json({
         success: true,
         message: "User notes updated successfully",
-        content: updatedContent
+        content: updatedContent,
       });
-
     } catch (error) {
       if (error instanceof z.ZodError) {
-        res.status(400).json({ error: "Invalid input data", details: error.errors });
+        res
+          .status(400)
+          .json({ error: "Invalid input data", details: error.errors });
       } else {
         console.error("Error updating user notes:", error);
         res.status(500).json({ error: "Internal server error" });
@@ -1185,12 +1271,13 @@ app.delete(
       req.logger?.info(`Pin ${pinId} deleted by user ${currentUser.id}`);
       res.status(200).json({
         success: true,
-        message: "Pin deleted successfully"
+        message: "Pin deleted successfully",
       });
-
     } catch (error) {
       if (error instanceof z.ZodError) {
-        res.status(400).json({ error: "Invalid input data", details: error.errors });
+        res
+          .status(400)
+          .json({ error: "Invalid input data", details: error.errors });
       } else {
         console.error("Error deleting pin:", error);
         res.status(500).json({ error: "Internal server error" });
@@ -1199,13 +1286,400 @@ app.delete(
   }
 );
 
+app.post(
+  "/api/google-places-autocomplete",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
 
+      const { query, location, radius, type } = SearchPlacesSchema.parse(
+        req.body
+      );
+
+      req.logger?.info(
+        `Search places request: query="${query}", user="${currentUser.id}"`
+      );
+
+      const places = await searchPlaces(
+        query,
+        location,
+        radius,
+        type,
+        req,
+        currentUser.id
+      );
+
+      res.status(200).json({
+        success: true,
+        places: places,
+        count: places.length,
+        query: query,
+      });
+    } catch (error) {
+      console.log("What is the exact error though", error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          success: false,
+          error: "Invalid input data",
+          details: error.errors,
+        });
+      } else {
+        console.error("Error searching places:", error);
+        res.status(500).json({
+          success: false,
+          error: "Internal server error.",
+        });
+      }
+    }
+  }
+);
+
+// Paginated pins API
+app.get(
+  "/api/trip/:tripId/pins",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      // Validate request parameters
+      const { tripId } = tripIdSchema.parse(req.params);
+
+      // Parse pagination parameters
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const offset = (page - 1) * limit;
+
+      // Verify user has access to this trip
+      const userInTrip = await isUserInTrip(currentUser.id, tripId);
+      if (!userInTrip) {
+        res.status(403).json({ error: "You don't have access to this trip" });
+        return;
+      }
+
+      // Get paginated pins from database
+      const prisma = new PrismaClient();
+      const pins = await prisma.pin.findMany({
+        where: {
+          content: {
+            tripId: tripId,
+          },
+        },
+        include: {
+          placeCache: {
+            select: {
+              id: true,
+              placeId: true,
+              name: true,
+              rating: true,
+              userRatingCount: true,
+              websiteUri: true,
+              lat: true,
+              lng: true,
+              images: true,
+              utcOffsetMinutes: true,
+              // Excluding currentOpeningHours and regularOpeningHours to reduce response size
+            },
+          },
+          content: {
+            select: {
+              id: true,
+              title: true,
+              rawData: true,
+              userNotes: true,
+              thumbnail: true,
+              userId: true,
+              createdAt: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        skip: offset,
+        take: limit,
+      });
+
+      // Get total count for pagination info
+      const totalPins = await prisma.pin.count({
+        where: {
+          content: {
+            tripId: tripId,
+          },
+        },
+      });
+
+      const totalPages = Math.ceil(totalPins / limit);
+      const hasNextPage = page < totalPages;
+      const hasPrevPage = page > 1;
+
+      res.status(200).json({
+        pins: pins,
+        pagination: {
+          currentPage: page,
+          totalPages: totalPages,
+          totalPins: totalPins,
+          limit: limit,
+          hasNextPage: hasNextPage,
+          hasPrevPage: hasPrevPage,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching paginated pins:", error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+);
+
+// API to manually create content and pin from placeId (no AI analysis)
+app.post(
+  "/api/manual-pin",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { placeId, tripId } = ManualPinSchema.parse(req.body);
+
+      req.logger?.info(
+        `Manual pin request: placeId="${placeId}", user="${currentUser.id}", tripId="${tripId}"`
+      );
+
+      // Step 1: Get full place details from Google Places API
+      const placeDetails = await getPlaceDetailsFromId(placeId, req);
+
+      req.logger?.debug(
+        `Place details for placeID - ${placeId}: ${placeDetails.name}`
+      );
+
+      // Step 2: Check if the place exists in the cache
+      let placeCache = await getPlaceCacheById(placeId);
+
+      if (!placeCache) {
+        req.logger?.debug(
+          "Could not find place in place Cache.. creating new entry"
+        );
+
+        // Use coordinates from place details
+        const coordinates = placeDetails.location
+          ? {
+              lat: placeDetails.location.latitude,
+              lng: placeDetails.location.longitude,
+            }
+          : null;
+
+        if (!coordinates) {
+          req.logger?.error(
+            `No coordinates found for place: ${placeDetails.name}`
+          );
+          throw new Error(
+            `Could not get coordinates for place: ${placeDetails.name}`
+          );
+        }
+
+        req.logger?.debug(
+          `Coordinates for placeID - ${placeId}: ${coordinates}`
+        );
+
+        // Step 3: Store in cache
+        placeCache = await createPlaceCache({
+          placeId: placeDetails.id,
+          name: placeDetails.name,
+          rating: placeDetails.rating ?? null,
+          userRatingCount: placeDetails.userRatingCount ?? null,
+          websiteUri: placeDetails.websiteUri ?? null,
+          currentOpeningHours: placeDetails.currentOpeningHours,
+          regularOpeningHours: placeDetails.regularOpeningHours,
+          lat: coordinates.lat,
+          lng: coordinates.lng,
+          images: placeDetails.images ?? [],
+          utcOffsetMinutes: placeDetails.utcOffsetMinutes ?? null,
+        });
+
+        req.logger?.debug(
+          `Created new entry in place cache ${placeCache.id} for placeID ${placeId}`
+        );
+      } else {
+        req.logger?.debug(`Found place id - ${placeId} in place cache`);
+      }
+
+      // Step 4: Classify the place category using AI
+      const category = await classifyPlaceCategory({
+        name: placeDetails.name,
+        types: placeDetails.types,
+        editorialSummary: placeDetails.editorialSummary,
+        businessStatus: placeDetails.businessStatus,
+      });
+
+      // Step 5: Create content with manual pin title
+      const manualContentTitle = `Manually Pinned: ${placeDetails.name}`;
+
+      // Create raw data description
+      const rawData = `Pinned through Google Places API - ${placeDetails.name}`;
+
+      // Create user notes
+      const userNotes = `Manually added ${placeDetails.name}`;
+
+      // Create pin description using editorial summary
+      const pinDescription =
+        placeDetails.editorialSummary?.text ||
+        `Manually added ${placeDetails.name}`;
+
+      const newContent = await createContent(
+        "", // No URL for manual pins
+        rawData,
+        currentUser.id,
+        tripId,
+        userNotes,
+        placeDetails.images && placeDetails.images.length > 0
+          ? placeDetails.images[0]
+          : ""
+      );
+
+      // Step 6: Update content with title and pin count
+      await updateContent(newContent.id, [], manualContentTitle, 1);
+
+      // Step 7: Create Pin linked to PlaceCache
+      const coordinates = { lat: placeCache.lat, lng: placeCache.lng };
+
+      const pin = await createPin({
+        name: placeDetails.name,
+        category: category,
+        contentId: newContent.id,
+        placeCacheId: placeCache.id,
+        coordinates: coordinates,
+        description: pinDescription,
+      });
+
+      req.logger?.info(
+        `Created manual pin - ${pin.id} with content_id - ${newContent.id} and place_id - ${placeCache.id}`
+      );
+
+      // Step 7: Respond with the created data
+      res.status(200).json({
+        success: true,
+        content: {
+          id: newContent.id,
+          title: manualContentTitle,
+          description: rawData,
+          userNotes: userNotes,
+          thumbnail:
+            placeDetails.images && placeDetails.images.length > 0
+              ? placeDetails.images[0]
+              : "",
+        },
+        pin: {
+          id: pin.id,
+          name: placeDetails.name,
+          category: category,
+          coordinates: coordinates,
+          description: pinDescription,
+        },
+        placeDetails: {
+          id: placeCache.id,
+          name: placeCache.name,
+          rating: placeCache.rating,
+          userRatingCount: placeCache.userRatingCount,
+          websiteUri: placeCache.websiteUri,
+          currentOpeningHours: placeCache.currentOpeningHours,
+          regularOpeningHours: placeCache.regularOpeningHours,
+          images: placeCache.images,
+          utcOffsetMinutes: placeCache.utcOffsetMinutes,
+          address: placeDetails.formattedAddress,
+        },
+      });
+    } catch (error) {
+      console.error("Error creating manual pin:", error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          success: false,
+          error: "Invalid input data",
+          details: error.errors,
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: "Internal server error.",
+        });
+      }
+    }
+  }
+);
+
+// API endpoint to monitor session usage (for debugging/admin purposes)
+app.get(
+  "/api/places-sessions",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const stats = getSessionStats();
+      const userSession = getSessionForUser(currentUser.id);
+
+      res.status(200).json({
+        success: true,
+        globalStats: stats,
+        userSession: userSession,
+      });
+    } catch (error) {
+      console.error("Error getting session stats:", error);
+      res.status(500).json({
+        success: false,
+        error: "Internal server error.",
+      });
+    }
+  }
+);
+
+// API endpoint to clear all sessions (admin only)
+app.delete(
+  "/api/places-sessions",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      // TODO: Add admin check here if needed
+      const result = clearAllSessions();
+
+      res.status(200).json({
+        success: true,
+        message: result.message,
+      });
+    } catch (error) {
+      console.error("Error clearing sessions:", error);
+      res.status(500).json({
+        success: false,
+        error: "Internal server error.",
+      });
+    }
+  }
+);
 
 // Start the server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
-
-

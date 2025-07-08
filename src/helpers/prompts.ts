@@ -4,13 +4,13 @@ export const captionPrompt = `
             ## **Instructions**:
             1. Analyze the caption and identify **any locations** mentioned.
             2. Categorize each place as either:
-              - **"food"** (for food-related places) or
-              - **"tourist spot"** (for sightseeing and attractions).
-              - **"night life"** (for nightlife places) or
-              - **"activities"** (for activities places) or
-              - **"nature"** (for nature places) or
-              - **"attraction"** (for attractions places) or
-              - **"accommodation"** (for hotels, airbnbs, villas, resorts, what points to accommodation) or
+              - **"Food"** (for food-related places like restaurants, cafes, bars, food markets, etc.)
+              - **"Night life"** (for nightlife places like clubs, bars, entertainment venues, etc.)
+              - **"Activities"** (for activities places like sports venues, gyms, adventure parks, etc.)
+              - **"Nature"** (for nature places like parks, hiking trails, natural features, etc.)
+              - **"Attraction"** (for attractions places like museums, galleries, cultural sites, etc.)
+              - **"Shopping"** (for shopping places like malls, markets, boutiques, etc.)
+              - **"Accommodation"** (for hotels, airbnbs, villas, resorts, and other lodging)
               - **"not pinned"** (for captions that do not mention any place or just a country)
               In a single caption there can be multiple places with different categories
             3. Identify the **city and country** where the place is located.
@@ -32,7 +32,7 @@ export const captionPrompt = `
                 "name": "<Place Name>",
                 "title": "<Title of the content>",
                 "location": "<Address, City, Country>",
-                "classification": "<One of: Food, Night life, Activities, Nature, Attraction ,Shopping ,accommodation ,Not Pinned>",
+                "classification": "<One of: Food, Night life, Activities, Nature, Attraction ,Shopping ,Accommodation ,Not Pinned>",
                 "additional_info": "<Any other relevant details from the caption>",
                 "lat": <Latitude as a number or null>,
                 "long": <Longitude as a number or null>
@@ -224,3 +224,127 @@ export const captionPrompt = `
             ---
 
             `;
+
+export const placeCategoryPrompt = `
+You are categorizing places based on Google Places API data. 
+
+## **Instructions**:
+1. Analyze the place details and categorize it into one of these categories:
+   - **"Food"** (for food-related places like restaurants, cafes, bars, food markets, etc.)
+   - **"Night life"** (for nightlife places like clubs, bars, entertainment venues, etc.)
+   - **"Activities"** (for activities places like sports venues, gyms, adventure parks, etc.)
+   - **"Nature"** (for nature places like parks, hiking trails, natural features, etc.)
+   - **"Attraction"** (for attractions places like museums, galleries, cultural sites, etc.)
+   - **"Shopping"** (for shopping places like malls, markets, boutiques, etc.)
+   - **"Accommodation"** (for hotels, airbnbs, villas, resorts, and other lodging)
+
+2. Use the following information to make your decision:
+   - **Place name**: The name of the establishment
+   - **Types**: Array of place types from Google (e.g., "restaurant", "museum", "park")
+   - **Editorial summary**: Google's description of the place
+   - **Business status**: Whether it's operational, closed, etc.
+
+3. **Return only the category name as a string, no JSON or additional text.**
+
+## **Input Format**:
+The input will be provided in this exact format:
+\`\`\`
+- Name: "Place Name"
+- Types: ["type1", "type2", "type3"]
+- Editorial Summary: "Google's description of the place"
+- Business Status: "OPERATIONAL" or "CLOSED" or other status
+\`\`\`
+
+## **Output Format**:
+Return exactly one of these category names as a plain string:
+- "Food"
+- "Night life"
+- "Activities"
+- "Nature"
+- "Attraction"
+- "Shopping"
+- "Accommodation"
+
+**Important**: Return only the category name, no quotes, no additional text, no explanations.
+
+## **Examples**:
+
+**Input**: 
+- Name: "Blue Bottle Coffee"
+- Types: ["coffee_shop", "restaurant", "food", "establishment"]
+- Editorial Summary: "Specialty coffee roaster and retailer"
+
+**Output**: Food
+
+**Input**:
+- Name: "Eiffel Tower"
+- Types: ["tourist_attraction", "point_of_interest", "establishment"]
+- Editorial Summary: "Iconic iron lattice tower"
+
+**Output**: Attraction
+
+**Input**:
+- Name: "Louvre Museum"
+- Types: ["museum", "art_gallery", "tourist_attraction"]
+- Editorial Summary: "World's largest art museum"
+
+**Output**: Attraction
+
+**Input**:
+- Name: "Central Park"
+- Types: ["park", "tourist_attraction", "point_of_interest"]
+- Editorial Summary: "Urban park with walking trails"
+
+**Output**: Nature
+
+**Input**:
+- Name: "Rock Climbing Gym"
+- Types: ["gym", "sports_complex", "establishment"]
+- Editorial Summary: "Indoor rock climbing facility"
+
+**Output**: Activities
+
+**Input**:
+- Name: "McDonald's"
+- Types: ["restaurant", "food", "establishment"]
+- Editorial Summary: "Fast food restaurant chain"
+
+**Output**: Food
+
+**Input**:
+- Name: "Broadway Theater"
+- Types: ["theater", "entertainment", "establishment"]
+- Editorial Summary: "Historic theater district"
+
+**Output**: Attraction
+
+**Input**:
+- Name: "Yosemite National Park"
+- Types: ["park", "tourist_attraction", "natural_feature"]
+- Editorial Summary: "National park with hiking trails"
+
+**Output**: Nature
+
+**Input**:
+- Name: "Hilton Hotel"
+- Types: ["lodging", "hotel", "establishment"]
+- Editorial Summary: "Luxury hotel chain"
+
+**Output**: Accommodation
+
+**Input**:
+- Name: "Nightclub XYZ"
+- Types: ["night_club", "bar", "establishment"]
+- Editorial Summary: "Popular nightclub with live music"
+
+**Output**: Night life
+
+**Input**:
+- Name: "Shopping Mall"
+- Types: ["shopping_mall", "establishment"]
+- Editorial Summary: "Large shopping center with multiple stores"
+
+**Output**: Shopping
+
+**Now categorize this place based on the provided details:**
+`;

@@ -3,7 +3,7 @@ import { OpenAI } from "openai";
 import dotenv from "dotenv";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import express, { Request, Response } from "express";
-import { captionPrompt } from "./prompts";
+import { captionPrompt, placeCategoryPrompt } from "./prompts";
 
 dotenv.config(); // Load .env variables
 
@@ -88,5 +88,63 @@ export async function extractLocationAndClassifyGemini(
   } catch (error) {
     console.error("Error calling Gemini API:", error);
     throw new Error("Failed to analyze caption.");
+  }
+}
+
+export async function classifyPlaceCategory(placeDetails: {
+  name: string;
+  types?: string[];
+  editorialSummary?: { text: string; languageCode: string };
+  businessStatus?: string;
+}): Promise<string> {
+  try {
+    const placeInfo = `
+- Name: "${placeDetails.name}"
+- Types: ${JSON.stringify(placeDetails.types || [])}
+- Editorial Summary: "${placeDetails.editorialSummary?.text || ""}"
+- Business Status: "${placeDetails.businessStatus || ""}"
+`;
+
+    const response = await openaiClient.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: placeCategoryPrompt,
+        },
+        {
+          role: "user",
+          content: placeInfo,
+        },
+      ],
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error("No response content from OpenAI");
+
+    // Clean the response to get just the category
+    const category = content.trim().replace(/"/g, "");
+
+    // Validate the category
+    const validCategories = [
+      "Food",
+      "tourist spot",
+      "Night life",
+      "Activities",
+      "nature",
+      "attraction",
+      "accommodation",
+    ];
+    if (!validCategories.includes(category)) {
+      console.warn(
+        `Invalid category returned: ${category}, defaulting to attraction`
+      );
+      return "attraction";
+    }
+
+    return category;
+  } catch (error) {
+    console.error("Error classifying place category:", error);
+    return "Attraction"; // Default fallback
   }
 }
