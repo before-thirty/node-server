@@ -62,6 +62,8 @@ import { getDummyStartAndEndDate } from "./utils/jsUtils";
 import pocRoutes from "./poc-routes";
 import { generateContentEmbeddings } from "./poc-embeddings";
 import cronRoutes from "./cronRoutes";
+import moderationRoutes from "./moderationRoutes";
+
 import path from "path";
 
 dotenv.config();
@@ -75,6 +77,7 @@ app.use(morgan("dev"));
 
 app.use("/api", pocRoutes); // POC semantic search routes
 app.use("/cron", cronRoutes);
+app.use("/api/moderation", moderationRoutes);
 // app.use(
 //   "/.well-known",
 //   express.static(path.join(process.cwd(), ".well-known"))
@@ -616,6 +619,12 @@ app.get(
   authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
       // Validate request parameters
       const { tripId } = tripIdSchema.parse(req.params);
 
@@ -626,35 +635,40 @@ app.get(
         ? new Date(userLastLogin * 1000)
         : null;
 
-      // Get current user ID
-      const currentUser = req.currentUser;
-      if (currentUser == null) {
-        res.status(401).json({ error: "User not authenticated" });
+      // Verify user has access to this trip
+      const userInTrip = await isUserInTrip(currentUser.id, tripId);
+      if (!userInTrip) {
+        res.status(403).json({ error: "You don't have access to this trip" });
         return;
       }
 
-      // Fetch content, pins, and place cache separately
-      const { contentList, pinsList, placeCacheList, myMustDoPinIds } =
+      // Fetch content, pins, and place cache with blocking logic
+      const { contentList, pinsList, placeCacheList } =
         await getTripContentData(tripId, lastLoginDate, currentUser.id);
+      
       const trip = await getTripById(tripId);
-      const nested = await getContentPinsPlaceNested(tripId);
+      const nested = await getContentPinsPlaceNested(tripId, currentUser.id);
 
+      // Get user IDs from content, filtering out blocked users
       const userIds = [
         ...new Set(
           contentList.map((content) => content.userId).filter(Boolean)
         ),
       ];
 
-      const users = userIds.length > 0 ? await getUsersByIds(userIds) : [];
+      const users = userIds.length > 0 ? await getUsersByIds(userIds, currentUser.id) : [];
 
       res.status(200).json({
         contents: contentList,
         pins: pinsList,
         placeCaches: placeCacheList,
-        myMustDoPinIds,
         nestedData: nested,
         trip,
-        users, // TODO: DONT EXPOSE USERS NUMBER AND EMAIL HERE - NEEDS FRONTEND CHANGE TO SO DO LATER
+        users: users.map(user => ({
+          id: user.id,
+          name: user.name,
+          // Don't expose sensitive info like email and phone number
+        })),
       });
     } catch (error) {
       console.error("Error fetching trip data:", error);
@@ -689,8 +703,27 @@ app.get(
   authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
       const { tripId } = req.query;
-      const users = await getUsersFromTrip(tripId as string);
+      
+      if (!tripId) {
+        res.status(400).json({ error: "tripId is required" });
+        return;
+      }
+
+      // Verify user has access to this trip
+      const userInTrip = await isUserInTrip(currentUser.id, tripId as string);
+      if (!userInTrip) {
+        res.status(403).json({ error: "You don't have access to this trip" });
+        return;
+      }
+
+      const users = await getUsersFromTrip(tripId as string, currentUser.id);
       res.status(200).json(users);
     } catch (error) {
       console.error("Error fetching users from trip:", error);
@@ -721,18 +754,36 @@ app.post(
     }
   }
 );
+
+
 app.get(
   "/api/getMessagesByTrip",
   authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
       const { tripId, before, limit = 20 } = req.query;
+      
       if (!tripId) {
         res.status(400).json({ error: "tripId is required" });
         return;
       }
+
+      // Verify user has access to this trip
+      const userInTrip = await isUserInTrip(currentUser.id, tripId as string);
+      if (!userInTrip) {
+        res.status(403).json({ error: "You don't have access to this trip" });
+        return;
+      }
+
       const queryLimit = parseInt(limit as string, 10);
       let beforeDate: Date | undefined = undefined;
+      
       if (before) {
         const beforeMessage = await getMessageById(
           tripId as string,
@@ -744,11 +795,14 @@ app.get(
         }
         beforeDate = beforeMessage?.createdAt;
       }
+      
       const messages = await getMessagesByTime(
         tripId as string,
         beforeDate as any,
-        queryLimit as number
+        queryLimit as number,
+        currentUser.id
       );
+      
       res.json(messages);
     } catch (err) {
       console.error(err);
