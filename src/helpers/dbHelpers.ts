@@ -394,6 +394,27 @@ export const isUserInTrip = async (
   tripId: string
 ): Promise<boolean> => {
   try {
+    // First check if the trip is public
+    const trip = await prisma.trip.findUnique({
+      where: {
+        id: tripId,
+      },
+      select: {
+        isPublic: true,
+      },
+    });
+
+    // If trip doesn't exist, return false
+    if (!trip) {
+      return false;
+    }
+
+    // If trip is public, always return true
+    if (trip.isPublic) {
+      return true;
+    }
+
+    // If trip is not public, check if user is a member
     const tripUser = await prisma.tripUser.findUnique({
       where: {
         tripId_userId: {
