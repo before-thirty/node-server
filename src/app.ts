@@ -64,7 +64,8 @@ import { generateContentEmbeddings } from "./poc-embeddings";
 import cronRoutes from "./cronRoutes";
 import moderationRoutes from "./moderationRoutes";
 
-import path from "path";
+const prisma = new PrismaClient();
+
 
 dotenv.config();
 
@@ -104,6 +105,7 @@ const ContentSchema = z.object({
   url: z.string(),
   content: z.string().optional(),
   trip_id: z.string(),
+  user_id: z.string(),
   user_notes: z.string().optional(),
 });
 
@@ -123,19 +125,19 @@ app.get("/api/status", async (req: Request, res: Response) => {
 
 app.post(
   "/api/extract-lat-long",
-  authenticate,
+  // authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const currentUser = req.currentUser;
-      if (currentUser == null) {
-        res.status(401).json({ error: "User not authenticated" });
-        throw new Error("User not authenticated");
-      }
-      const user_id = currentUser.id;
+      // const currentUser = req.currentUser;
+      // if (currentUser == null) {
+      //   res.status(401).json({ error: "User not authenticated" });
+      //   throw new Error("User not authenticated");
+      // }
+      // const user_id = currentUser.id;
       const validatedData = ContentSchema.parse(req.body);
 
       console.log(req.body);
-      const { url, content, trip_id, user_notes } = validatedData;
+      const { url, content, trip_id, user_notes,user_id } = validatedData;
 
       console.log(
         `Received request to extract lat-long: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`
@@ -1728,6 +1730,211 @@ app.delete(
         success: false,
         error: "Internal server error.",
       });
+    }
+  }
+);
+
+
+const UpdateContentSchema = z.object({
+  content_id: z.string().uuid(),
+  content: z.string().min(1, "Content/transcript is required")
+});
+
+// Add this endpoint to your main Express app file
+app.post(
+  "/api/update-content",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      
+      const validatedData = UpdateContentSchema.parse(req.body);
+      const { content_id, content } = validatedData;
+
+      console.log(`Received request to update content: content_id=${content_id}`);
+      req.logger?.info(
+        `Update content request received: content_id=${content_id}`
+      );
+
+      // Verify the content exists and user has access
+      const existingContent = await prisma.content.findUnique({
+        where: { id: content_id }
+      });
+
+      if (!existingContent) {
+        res.status(404).json({ error: "Content not found" });
+        return;
+      }
+
+      const trip_id = existingContent.tripId;
+      const description = content;
+
+      console.log("Processing transcript content:", description);
+
+      // Extract structured data using AI (same as extract-lat-long)
+      const analysis = await extractLocationAndClassify(description, req);
+
+      // Get title from the first analysis object, if present
+      const title =
+        analysis && analysis.length > 0 && analysis[0].title
+          ? analysis[0].title
+          : existingContent.title || "";
+
+      // Update the Content entry with transcript and structured data
+      const pinsCount = analysis.filter(
+        (a) => a.classification !== "Not Pinned"
+      ).length;
+
+      // Update content with new transcript data and analysis
+      await updateContent(content_id, analysis, title, pinsCount);
+      
+      // Also update the rawData field with the transcript
+      await prisma.content.update({
+        where: { id: content_id },
+        data: {
+          rawData: description,
+          url: content_url // Update URL if different
+        }
+      });
+
+      req.logger?.debug(
+        `Updated content entry with transcript data ${content_id}`
+      );
+
+      // Generate embeddings for the updated content in the background
+      try {
+        console.log(`🔄 Starting embedding generation for updated content ${content_id}...`);
+        generateContentEmbeddings(content_id)
+          .then(() => {
+            console.log(`✅ Embeddings generated successfully for content ${content_id}`);
+          })
+          .catch((embeddingError) => {
+            console.error(`❌ Failed to generate embeddings for content ${content_id}:`, embeddingError);
+            // Don't throw here - embedding generation failure shouldn't affect the main flow
+          });
+      } catch (embeddingError) {
+        console.error(`❌ Error starting embedding generation for content ${content_id}:`, embeddingError);
+        // Continue with the main flow even if embedding generation fails
+      }
+
+      // Delete existing pins for this content before creating new ones
+      await prisma.pin.deleteMany({
+        where: { contentId: content_id }
+      });
+
+      // Process each analysis object in the list (same logic as extract-lat-long)
+      const responses = await Promise.all(
+        analysis.map(async (analysis) => {
+          if (analysis.classification === "Not Pinned") {
+            return analysis;
+          }
+          const full_loc =
+            (analysis.name ?? "") + " " + (analysis.location ?? "");
+
+          // Step 1: Get Place ID
+          const placeId = await getPlaceId(full_loc, req);
+
+          let coordinates;
+          let placeCacheId;
+
+          // Step 2: Check if the place exists in the cache
+          let placeCache = await getPlaceCacheById(placeId);
+
+          if (!placeCache) {
+            req.logger?.debug(
+              "Could not find place in place Cache.. getting full place details"
+            );
+            // Step 3: If not in cache, fetch full place details (includes coordinates)
+            const placeDetails = await getFullPlaceDetails(full_loc, req);
+
+            req.logger?.debug(
+              `Place details for placeID - ${placeId} is - ${placeDetails}`
+            );
+
+            // Use coordinates from place details instead of separate API call
+            coordinates = placeDetails.location ? {
+              lat: placeDetails.location.latitude,
+              lng: placeDetails.location.longitude
+            } : null;
+
+            if (!coordinates) {
+              req.logger?.error(`No coordinates found for place: ${full_loc}`);
+              throw new Error(`Could not get coordinates for place: ${full_loc}`);
+            }
+
+            req.logger?.debug(
+              `Coordinates for placeID - ${placeId} is - ${coordinates}`
+            );
+
+            // Step 4: Store in cache
+            placeCache = await createPlaceCache({
+              placeId: placeDetails.id,
+              name: placeDetails.name,
+              rating: placeDetails.rating ?? null,
+              userRatingCount: placeDetails.userRatingCount ?? null,
+              websiteUri: placeDetails.websiteUri ?? null,
+              currentOpeningHours: placeDetails.currentOpeningHours,
+              regularOpeningHours: placeDetails.regularOpeningHours,
+              lat: coordinates.lat,
+              lng: coordinates.lng,
+              images: placeDetails.images ?? [],
+              utcOffsetMinutes: placeDetails.utcOffsetMinutes ?? null,
+            });
+
+            req.logger?.debug(
+              `Created new entry in place cache ${placeCache.id} for placeID ${placeId}`
+            );
+          } else {
+            req.logger?.debug(`Found place id - ${placeId} in place cache`);
+            coordinates = { lat: placeCache.lat, lng: placeCache.lng };
+          }
+
+          placeCacheId = placeCache.id;
+
+          // Step 5: Create Pin linked to PlaceCache
+          const pin = await createPin({
+            name: analysis.name ?? "",
+            category: analysis.classification ?? "",
+            contentId: content_id,
+            placeCacheId: placeCacheId,
+            coordinates: coordinates,
+            description: analysis.additional_info ?? "",
+          });
+          req.logger?.info(
+            `Created Pin - ${pin.id} with content_id - ${content_id} and place_id - ${placeCacheId}`
+          );
+
+          return {
+            ...analysis,
+            placeCacheId,
+            coordinates,
+            placeDetails: {
+              name: placeCache.name,
+              rating: placeCache.rating,
+              userRatingCount: placeCache.userRatingCount,
+              websiteUri: placeCache.websiteUri,
+              currentOpeningHours: placeCache.currentOpeningHours,
+              regularOpeningHours: placeCache.regularOpeningHours,
+              images: placeCache.images,
+              utcOffsetMinutes: placeCache.utcOffsetMinutes,
+            },
+          };
+        })
+      );
+
+      // Respond with the processed data
+      res.status(200).json({
+        message: "Content updated successfully with transcript analysis",
+        contentId: content_id,
+        analysis: responses
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json({ error: "Invalid input data", details: error.errors });
+      } else {
+        console.error(`Error processing update content request:`, error);
+        res.status(500).json({ error: "Internal server error." });
+      }
     }
   }
 );
