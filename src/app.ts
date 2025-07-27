@@ -1791,7 +1791,6 @@ app.post(
         where: { id: content_id },
         data: {
           rawData: description,
-          url: content_url // Update URL if different
         }
       });
 
