@@ -123,21 +123,145 @@ app.get("/api/status", async (req: Request, res: Response) => {
   });
 });
 
+// Async background processing function
+const processContentAnalysisAsync = async (
+  contentId: string,
+  description: string,
+  req: Request
+): Promise<void> => {
+  try {
+    console.log(`Starting async processing for content ${contentId}`);
+    
+    // Extract structured data using AI
+    const analysis = await extractLocationAndClassify(description, req);
+
+    // Get title from the first analysis object, if present
+    const title =
+      analysis && analysis.length > 0 && analysis[0].title
+        ? analysis[0].title
+        : "";
+
+    // Update the Content entry with structured data and title
+    const pinsCount = analysis.filter(
+      (a) => a.classification !== "Not Pinned"
+    ).length;
+    await updateContent(contentId, analysis, title, pinsCount);
+    
+    req.logger?.debug(`Updated content entry with structured data ${contentId}`);
+
+    // Generate embeddings for the new content in the background
+    try {
+      console.log(`🔄 Starting embedding generation for new content ${contentId}...`);
+      generateContentEmbeddings(contentId)
+        .then(() => {
+          console.log(`✅ Embeddings generated successfully for content ${contentId}`);
+        })
+        .catch((embeddingError) => {
+          console.error(`❌ Failed to generate embeddings for content ${contentId}:`, embeddingError);
+        });
+    } catch (embeddingError) {
+      console.error(`❌ Error starting embedding generation for content ${contentId}:`, embeddingError);
+    }
+
+    // Process each analysis object for pin creation
+    await Promise.all(
+      analysis.map(async (analysis) => {
+        if (analysis.classification === "Not Pinned") {
+          return;
+        }
+        
+        const full_loc = (analysis.name ?? "") + " " + (analysis.location ?? "");
+
+        // Step 1: Get Place ID
+        const placeId = await getPlaceId(full_loc, req);
+        let coordinates;
+        let placeCacheId;
+
+        // Step 2: Check if the place exists in the cache
+        let placeCache = await getPlaceCacheById(placeId);
+
+        if (!placeCache) {
+          req.logger?.debug("Could not find place in place Cache.. getting full place details");
+          
+          // Step 3: If not in cache, fetch full place details (includes coordinates)
+          const placeDetails = await getFullPlaceDetails(full_loc, req);
+
+          req.logger?.debug(`Place details for placeID - ${placeId} is - ${placeDetails}`);
+
+          // Use coordinates from place details instead of separate API call
+          coordinates = placeDetails.location
+            ? {
+                lat: placeDetails.location.latitude,
+                lng: placeDetails.location.longitude,
+              }
+            : null;
+
+          if (!coordinates) {
+            req.logger?.error(`No coordinates found for place: ${full_loc}`);
+            throw new Error(`Could not get coordinates for place: ${full_loc}`);
+          }
+
+          req.logger?.debug(`Coordinates for placeID - ${placeId} is - ${coordinates}`);
+
+          // Step 4: Store in cache
+          placeCache = await createPlaceCache({
+            placeId: placeDetails.id,
+            name: placeDetails.name,
+            rating: placeDetails.rating ?? null,
+            userRatingCount: placeDetails.userRatingCount ?? null,
+            websiteUri: placeDetails.websiteUri ?? null,
+            currentOpeningHours: placeDetails.currentOpeningHours,
+            regularOpeningHours: placeDetails.regularOpeningHours,
+            lat: coordinates.lat,
+            lng: coordinates.lng,
+            images: placeDetails.images ?? [],
+            utcOffsetMinutes: placeDetails.utcOffsetMinutes ?? null,
+          });
+
+          req.logger?.debug(`Created new entry in place cache ${placeCache.id} for placeID ${placeId}`);
+        } else {
+          req.logger?.debug(`Found place id - ${placeId} in place cache`);
+          coordinates = { lat: placeCache.lat, lng: placeCache.lng };
+        }
+
+        placeCacheId = placeCache.id;
+
+        // Step 5: Create Pin linked to PlaceCache
+        const pin = await createPin({
+          name: analysis.name ?? "",
+          category: analysis.classification ?? "",
+          contentId: contentId,
+          placeCacheId: placeCacheId,
+          coordinates: coordinates,
+          description: analysis.additional_info ?? "",
+        });
+
+        req.logger?.info(`Created Pin - ${pin.id} with content_id - ${contentId} and place_id - ${placeCacheId}`);
+      })
+    );
+
+    console.log(`✅ Async processing completed for content ${contentId}`);
+  } catch (error) {
+    console.error(`❌ Error in async processing for content ${contentId}:`, error);
+    req.logger?.error(`Async processing failed for content ${contentId}:`, error);
+  }
+};
+
 app.post(
   "/api/extract-lat-long",
-  // authenticate,
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      // const currentUser = req.currentUser;
-      // if (currentUser == null) {
-      //   res.status(401).json({ error: "User not authenticated" });
-      //   throw new Error("User not authenticated");
-      // }
-      // const user_id = currentUser.id;
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        throw new Error("User not authenticated");
+      }
+      const user_id = currentUser.id;
       const validatedData = ContentSchema.parse(req.body);
 
       console.log(req.body);
-      const { url, content, trip_id, user_notes,user_id } = validatedData;
+      const { url, content, trip_id, user_notes } = validatedData;
 
       console.log(
         `Received request to extract lat-long: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`
@@ -181,172 +305,30 @@ app.post(
         contentThumbnail
       );
 
-      // Extract structured data using AI
-      const analysis = await extractLocationAndClassify(description ?? "", req);
+      console.log(`✅ Content created with ID: ${newContent.id}. Starting async processing...`);
+      req.logger?.info(`Content created: ${newContent.id}. Processing will continue asynchronously.`);
 
-      // Get title from the first analysis object, if present
-      const title =
-        analysis && analysis.length > 0 && analysis[0].title
-          ? analysis[0].title
-          : "";
+      // Start async processing in the background (don't await)
+      processContentAnalysisAsync(newContent.id, description, req);
 
-      // Update the Content entry with structured data and title
-      const pinsCount = analysis.filter(
-        (a) => a.classification !== "Not Pinned"
-      ).length;
-      await updateContent(newContent.id, analysis, title, pinsCount);
-      req.logger?.debug(
-        `Updated content entry with structured data ${newContent.id}`
-      );
-
-      // Generate embeddings for the new content in the background
-      try {
-        console.log(
-          `🔄 Starting embedding generation for new content ${newContent.id}...`
-        );
-        generateContentEmbeddings(newContent.id)
-          .then(() => {
-            console.log(
-              `✅ Embeddings generated successfully for content ${newContent.id}`
-            );
-          })
-          .catch((embeddingError) => {
-            console.error(
-              `❌ Failed to generate embeddings for content ${newContent.id}:`,
-              embeddingError
-            );
-            // Don't throw here - embedding generation failure shouldn't affect the main flow
-          });
-      } catch (embeddingError) {
-        console.error(
-          `❌ Error starting embedding generation for content ${newContent.id}:`,
-          embeddingError
-        );
-        // Continue with the main flow even if embedding generation fails
-      }
-
-      // ... rest of the pin processing logic remains the same ...
-      // Arrays to collect all created entities
-      const createdPins: any[] = [];
-      const createdPlaceCaches: any[] = [];
-      const createdContents = [newContent]; // The content we created earlier
-
-      // Process each analysis object in the list
-      const responses = await Promise.all(
-        analysis.map(async (analysis) => {
-          if (analysis.classification === "Not Pinned") {
-            return analysis;
-          }
-          const full_loc =
-            (analysis.name ?? "") + " " + (analysis.location ?? "");
-
-          // Step 1: Get Place ID
-          const placeId = await getPlaceId(full_loc, req);
-
-          let coordinates;
-          let placeCacheId;
-
-          // Step 2: Check if the place exists in the cache
-          let placeCache = await getPlaceCacheById(placeId);
-
-          if (!placeCache) {
-            req.logger?.debug(
-              "Could not find place in place Cache.. getting full place details"
-            );
-            // Step 3: If not in cache, fetch full place details (includes coordinates)
-            const placeDetails = await getFullPlaceDetails(full_loc, req);
-
-            req.logger?.debug(
-              `Place details for placeID - ${placeId} is - ${placeDetails}`
-            );
-
-            // Use coordinates from place details instead of separate API call
-            coordinates = placeDetails.location
-              ? {
-                  lat: placeDetails.location.latitude,
-                  lng: placeDetails.location.longitude,
-                }
-              : null;
-
-            if (!coordinates) {
-              req.logger?.error(`No coordinates found for place: ${full_loc}`);
-              throw new Error(
-                `Could not get coordinates for place: ${full_loc}`
-              );
-            }
-
-            req.logger?.debug(
-              `Coordinates for placeID - ${placeId} is - ${coordinates}`
-            );
-
-            // Step 4: Store in cache
-            placeCache = await createPlaceCache({
-              placeId: placeDetails.id,
-              name: placeDetails.name,
-              rating: placeDetails.rating ?? null,
-              userRatingCount: placeDetails.userRatingCount ?? null,
-              websiteUri: placeDetails.websiteUri ?? null,
-              currentOpeningHours: placeDetails.currentOpeningHours,
-              regularOpeningHours: placeDetails.regularOpeningHours,
-              lat: coordinates.lat,
-              lng: coordinates.lng,
-              images: placeDetails.images ?? [],
-              utcOffsetMinutes: placeDetails.utcOffsetMinutes ?? null,
-            });
-
-            req.logger?.debug(
-              `Created new entry in place cache ${placeCache.id} for placeID ${placeId}`
-            );
-          } else {
-            req.logger?.debug(`Found place id - ${placeId} in place cache`);
-            coordinates = { lat: placeCache.lat, lng: placeCache.lng };
-          }
-
-          // Add placeCache to array (both existing and newly created)
-          createdPlaceCaches.push(placeCache);
-
-          placeCacheId = placeCache.id;
-
-          // Step 5: Create Pin linked to PlaceCache
-          const pin = await createPin({
-            name: analysis.name ?? "",
-            category: analysis.classification ?? "",
-            contentId: newContent.id,
-            placeCacheId: placeCacheId,
-            coordinates: coordinates,
-            description: analysis.additional_info ?? "",
-          });
-
-          // Add to created pins array
-          createdPins.push(pin);
-
-          req.logger?.info(
-            `Created Pin - ${pin.id} with content_id - ${newContent.id} and place_id - ${placeCacheId}`
-          );
-
-          return {
-            ...analysis,
-            placeCacheId,
-            coordinates,
-            placeDetails: {
-              name: placeCache.name,
-              rating: placeCache.rating,
-              userRatingCount: placeCache.userRatingCount,
-              websiteUri: placeCache.websiteUri,
-              currentOpeningHours: placeCache.currentOpeningHours,
-              regularOpeningHours: placeCache.regularOpeningHours,
-              images: placeCache.images,
-              utcOffsetMinutes: placeCache.utcOffsetMinutes,
-            },
-          };
-        })
-      );
-
-      // Respond with arrays of created entities
-      res.status(200).json({
-        pins: createdPins,
-        contents: createdContents,
-        placeCaches: createdPlaceCaches,
+      // Return immediate response with content info
+      res.status(202).json({
+        success: true,
+        message: "Content received and is being processed",
+        content: {
+          id: newContent.id,
+          url: newContent.url,
+          rawData: newContent.rawData,
+          userId: newContent.userId,
+          tripId: newContent.tripId,
+          userNotes: newContent.userNotes,
+          thumbnail: newContent.thumbnail,
+          createdAt: newContent.createdAt,
+        },
+        processing: {
+          status: "in_progress",
+          message: "AI analysis and pin creation are being processed in the background"
+        }
       });
     } catch (error) {
       console.log("Look at exact error", error);
