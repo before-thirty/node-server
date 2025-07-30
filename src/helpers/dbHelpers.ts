@@ -1239,3 +1239,23 @@ export const getModerationStats = async () => {
     throw error;
   }
 };
+
+// Get user's role in a specific trip
+export const getUserRoleInTrip = async (
+  userId: string,
+  tripId: string
+): Promise<string | null> => {
+  const tripUser = await prisma.tripUser.findUnique({
+    where: {
+      tripId_userId: {
+        tripId,
+        userId,
+      },
+    },
+    select: {
+      role: true,
+    },
+  });
+  
+  return tripUser?.role || null;
+};

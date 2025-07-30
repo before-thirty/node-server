@@ -55,6 +55,7 @@ import {
   verifyContentAccess,
   verifyPinAccess,
   getPublicTrips,
+  getUserRoleInTrip,
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "./middleware/currentUser";
@@ -398,6 +399,84 @@ app.post(
   }
 );
 
+// API to delete a trip and all related data (except place cache)
+app.delete(
+  "/api/delete-trip",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { tripId } = DeleteTripSchema.parse(req.body);
+
+      req.logger?.info(
+        `Delete trip request: tripId=${tripId}, user=${currentUser.id}`
+      );
+
+      // Verify the trip exists
+      const trip = await getTripById(tripId);
+      if (!trip) {
+        res.status(404).json({ error: "Trip not found" });
+        return;
+      }
+
+      // Verify user has access to this trip and is an owner
+      const userRole = await getUserRoleInTrip(currentUser.id, tripId);
+      if (!userRole) {
+        res.status(403).json({ 
+          error: "You don't have access to this trip" 
+        });
+        return;
+      }
+
+      // Only owners can delete trips
+      if (userRole !== "owner") {
+        res.status(403).json({ 
+          error: "Only trip owners can delete trips" 
+        });
+        return;
+      }
+
+      // Delete the trip - Prisma cascade deletes will handle related records
+      // This will delete:
+      // - TripUser entries (trip members)
+      // - Content entries (and their pins via cascade)
+      // - ShareToken entries
+      // - UserPlaceMustDo entries
+      // - Message entries
+      // PlaceCache remains untouched as intended
+      await prisma.trip.delete({
+        where: { id: tripId }
+      });
+
+      req.logger?.info(
+        `Trip ${tripId} successfully deleted by user ${currentUser.id}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Trip and all related data deleted successfully",
+        deletedTripId: tripId
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: "Invalid input data",
+          details: error.errors
+        });
+      } else {
+        console.error("Error deleting trip:", error);
+        req.logger?.error(`Failed to delete trip: ${error}`);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
 app.get(
   "/api/public-trips",
   authenticate,
@@ -673,7 +752,7 @@ app.post(
       const user_id = currentUser.id;
       const { trip_id } = req.body;
       console.log(user_id, trip_id);
-      await addUserToTrip(trip_id, user_id);
+      await addUserToTrip(trip_id, user_id, "member");
       res.status(201).json({ message: "User added to trip successfully." });
     } catch (error) {
       console.error("Error adding user to trip:", error);
@@ -1065,6 +1144,10 @@ const EditUserNotesSchema = z.object({
 
 const DeletePinSchema = z.object({
   pinId: z.string().uuid(),
+});
+
+const DeleteTripSchema = z.object({
+  tripId: z.string().uuid(),
 });
 
 const SearchPlacesSchema = z.object({
