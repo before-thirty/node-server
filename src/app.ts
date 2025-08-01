@@ -106,7 +106,6 @@ const ContentSchema = z.object({
   url: z.string(),
   content: z.string().optional(),
   trip_id: z.string(),
-  user_id: z.string(),
   user_notes: z.string().optional(),
 });
 
@@ -1150,6 +1149,10 @@ const DeleteTripSchema = z.object({
   tripId: z.string().uuid(),
 });
 
+const DeleteContentSchema = z.object({
+  contentId: z.string().uuid(),
+});
+
 const SearchPlacesSchema = z.object({
   query: z.string().min(1, "Search query is required"),
   location: z
@@ -1401,6 +1404,95 @@ app.delete(
           .json({ error: "Invalid input data", details: error.errors });
       } else {
         console.error("Error deleting pin:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
+// API to delete content and its associated pins (preserves place cache)
+app.delete(
+  "/api/delete-content",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { contentId } = DeleteContentSchema.parse(req.body);
+
+      req.logger?.info(
+        `Delete content request: contentId=${contentId}, user=${currentUser.id}`
+      );
+
+      // Get the content to verify it exists and check ownership
+      const content = await prisma.content.findUnique({
+        where: { id: contentId },
+        select: {
+          id: true,
+          userId: true,
+          tripId: true,
+          url: true,
+          title: true,
+        },
+      });
+
+      if (!content) {
+        res.status(404).json({ error: "Content not found" });
+        return;
+      }
+
+      // Check if user owns the content OR is a trip owner
+      let canDelete = false;
+      
+      if (content.userId === currentUser.id) {
+        // User owns the content
+        canDelete = true;
+      } else {
+        // Check if user is a trip owner
+        const userRole = await getUserRoleInTrip(currentUser.id, content.tripId);
+        if (userRole === "owner") {
+          canDelete = true;
+        }
+      }
+
+      if (!canDelete) {
+        res.status(403).json({ 
+          error: "You don't have permission to delete this content" 
+        });
+        return;
+      }
+
+      // Delete the content and its pins (Prisma cascade will handle pins)
+      // This will delete:
+      // - The Content record
+      // - All associated Pin records (via onDelete: Cascade)
+      // PlaceCache remains untouched as intended
+      await prisma.content.delete({
+        where: { id: contentId }
+      });
+
+      req.logger?.info(
+        `Content ${contentId} and its pins successfully deleted by user ${currentUser.id}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Content and associated pins deleted successfully",
+        deletedContentId: contentId
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: "Invalid input data",
+          details: error.errors
+        });
+      } else {
+        console.error("Error deleting content:", error);
+        req.logger?.error(`Failed to delete content: ${error}`);
         res.status(500).json({ error: "Internal server error" });
       }
     }
