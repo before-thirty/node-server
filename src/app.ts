@@ -64,6 +64,13 @@ import pocRoutes from "./poc-routes";
 import { generateContentEmbeddings } from "./poc-embeddings";
 import cronRoutes from "./cronRoutes";
 import moderationRoutes from "./moderationRoutes";
+import {
+  registerFcmToken,
+  unregisterFcmToken,
+  sendNotificationToUsers,
+  sendBroadcastNotification,
+  getUserNotificationStats,
+} from "./services/notificationService";
 
 const prisma = new PrismaClient();
 
@@ -1170,6 +1177,35 @@ const ManualPinSchema = z.object({
   tripId: z.string().uuid(),
 });
 
+// Notification schemas
+const RegisterFcmTokenSchema = z.object({
+  fcmToken: z.string().min(1, "FCM token is required"),
+  deviceInfo: z.object({
+    platform: z.string().optional(),
+    version: z.string().optional(),
+    deviceId: z.string().optional(),
+  }).optional(),
+});
+
+const UnregisterFcmTokenSchema = z.object({
+  fcmToken: z.string().min(1, "FCM token is required"),
+});
+
+const SendNotificationSchema = z.object({
+  userIds: z.array(z.string().uuid()).min(1, "At least one user ID is required"),
+  title: z.string().min(1, "Title is required"),
+  body: z.string().min(1, "Body is required"),
+  data: z.record(z.string()).optional(),
+  imageUrl: z.string().url().optional(),
+});
+
+const BroadcastNotificationSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  body: z.string().min(1, "Body is required"),
+  data: z.record(z.string()).optional(),
+  imageUrl: z.string().url().optional(),
+});
+
 // API to mark a place as must-do for a trip
 app.post(
   "/api/mark-place-must-do",
@@ -2091,6 +2127,209 @@ app.post(
         console.error(`Error processing update content request:`, error);
         res.status(500).json({ error: "Internal server error." });
       }
+    }
+  }
+);
+
+// Register FCM token for push notifications
+app.post(
+  "/api/notifications/register-token",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { fcmToken, deviceInfo } = RegisterFcmTokenSchema.parse(req.body);
+
+      await registerFcmToken(currentUser.id, fcmToken, deviceInfo);
+
+      req.logger?.info(
+        `FCM token registered for user ${currentUser.id}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "FCM token registered successfully",
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: "Invalid input data",
+          details: error.errors,
+        });
+      } else {
+        console.error("Error registering FCM token:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
+// Unregister FCM token
+app.delete(
+  "/api/notifications/unregister-token",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { fcmToken } = UnregisterFcmTokenSchema.parse(req.body);
+
+      await unregisterFcmToken(fcmToken);
+
+      req.logger?.info(
+        `FCM token unregistered for user ${currentUser.id}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "FCM token unregistered successfully",
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: "Invalid input data",
+          details: error.errors,
+        });
+      } else {
+        console.error("Error unregistering FCM token:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
+// Send notification to specific users
+app.post(
+  "/api/notifications/send",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { userIds, title, body, data, imageUrl } = SendNotificationSchema.parse(req.body);
+
+      const result = await sendNotificationToUsers(userIds, {
+        title,
+        body,
+        data,
+        imageUrl,
+      });
+
+      req.logger?.info(
+        `Notification sent by user ${currentUser.id} to ${userIds.length} users - Success: ${result.successCount}, Failed: ${result.failureCount}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Notification sent successfully",
+        result: {
+          successCount: result.successCount,
+          failureCount: result.failureCount,
+          totalTargeted: userIds.length,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: "Invalid input data",
+          details: error.errors,
+        });
+      } else {
+        console.error("Error sending notification:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
+// Send broadcast notification to all users (admin only - you may want to add admin check)
+app.post(
+  "/api/notifications/broadcast",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      // TODO: Add admin role check here if needed
+      // const userRole = await getUserRole(currentUser.id);
+      // if (userRole !== "admin") {
+      //   res.status(403).json({ error: "Admin access required" });
+      //   return;
+      // }
+
+      const { title, body, data, imageUrl } = BroadcastNotificationSchema.parse(req.body);
+
+      const result = await sendBroadcastNotification({
+        title,
+        body,
+        data,
+        imageUrl,
+      });
+
+      req.logger?.info(
+        `Broadcast notification sent by user ${currentUser.id} - Success: ${result.successCount}, Failed: ${result.failureCount}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Broadcast notification sent successfully",
+        result: {
+          successCount: result.successCount,
+          failureCount: result.failureCount,
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: "Invalid input data",
+          details: error.errors,
+        });
+      } else {
+        console.error("Error sending broadcast notification:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
+// Get user's notification statistics
+app.get(
+  "/api/notifications/stats",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const stats = await getUserNotificationStats(currentUser.id);
+
+      res.status(200).json({
+        success: true,
+        stats,
+      });
+    } catch (error) {
+      console.error("Error fetching notification stats:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
   }
 );

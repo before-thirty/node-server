@@ -36,6 +36,9 @@ model User {
   // User blocking relations
   blockingUsers     UserBlock[]      @relation("BlockingUser")
   blockedByUsers    UserBlock[]      @relation("BlockedUser")
+  
+  // FCM tokens relation
+  fcmTokens         FcmToken[]
 
   @@schema("app_data")
 }
@@ -283,5 +286,23 @@ enum ReportStatus {
   ACTIONED      // Content hidden or user blocked
   DISMISSED     // Report was reviewed but no action taken
   
+  @@schema("app_data")
+}
+
+model FcmToken {
+  id          String   @id @default(uuid())
+  userId      String
+  fcmToken    String   @unique
+  deviceInfo  Json?    // Store device information like platform, version, etc.
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Indexes for performance
+  @@index([userId])
+  @@index([fcmToken])
   @@schema("app_data")
 }
