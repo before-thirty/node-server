@@ -74,7 +74,6 @@ import {
 
 const prisma = new PrismaClient();
 
-
 dotenv.config();
 
 const app = express();
@@ -138,7 +137,7 @@ const processContentAnalysisAsync = async (
 ): Promise<void> => {
   try {
     console.log(`Starting async processing for content ${contentId}`);
-    
+
     // Extract structured data using AI
     const analysis = await extractLocationAndClassify(description, req);
 
@@ -153,21 +152,33 @@ const processContentAnalysisAsync = async (
       (a) => a.classification !== "Not Pinned"
     ).length;
     await updateContent(contentId, analysis, title, pinsCount);
-    
-    req.logger?.debug(`Updated content entry with structured data ${contentId}`);
+
+    req.logger?.debug(
+      `Updated content entry with structured data ${contentId}`
+    );
 
     // Generate embeddings for the new content in the background
     try {
-      console.log(`🔄 Starting embedding generation for new content ${contentId}...`);
+      console.log(
+        `🔄 Starting embedding generation for new content ${contentId}...`
+      );
       generateContentEmbeddings(contentId)
         .then(() => {
-          console.log(`✅ Embeddings generated successfully for content ${contentId}`);
+          console.log(
+            `✅ Embeddings generated successfully for content ${contentId}`
+          );
         })
         .catch((embeddingError) => {
-          console.error(`❌ Failed to generate embeddings for content ${contentId}:`, embeddingError);
+          console.error(
+            `❌ Failed to generate embeddings for content ${contentId}:`,
+            embeddingError
+          );
         });
     } catch (embeddingError) {
-      console.error(`❌ Error starting embedding generation for content ${contentId}:`, embeddingError);
+      console.error(
+        `❌ Error starting embedding generation for content ${contentId}:`,
+        embeddingError
+      );
     }
 
     // Process each analysis object for pin creation
@@ -176,8 +187,9 @@ const processContentAnalysisAsync = async (
         if (analysis.classification === "Not Pinned") {
           return;
         }
-        
-        const full_loc = (analysis.name ?? "") + " " + (analysis.location ?? "");
+
+        const full_loc =
+          (analysis.name ?? "") + " " + (analysis.location ?? "");
 
         // Step 1: Get Place ID
         const placeId = await getPlaceId(full_loc, req);
@@ -188,12 +200,16 @@ const processContentAnalysisAsync = async (
         let placeCache = await getPlaceCacheById(placeId);
 
         if (!placeCache) {
-          req.logger?.debug("Could not find place in place Cache.. getting full place details");
-          
+          req.logger?.debug(
+            "Could not find place in place Cache.. getting full place details"
+          );
+
           // Step 3: If not in cache, fetch full place details (includes coordinates)
           const placeDetails = await getFullPlaceDetails(full_loc, req);
 
-          req.logger?.debug(`Place details for placeID - ${placeId} is - ${placeDetails}`);
+          req.logger?.debug(
+            `Place details for placeID - ${placeId} is - ${placeDetails}`
+          );
 
           // Use coordinates from place details instead of separate API call
           coordinates = placeDetails.location
@@ -208,7 +224,9 @@ const processContentAnalysisAsync = async (
             throw new Error(`Could not get coordinates for place: ${full_loc}`);
           }
 
-          req.logger?.debug(`Coordinates for placeID - ${placeId} is - ${coordinates}`);
+          req.logger?.debug(
+            `Coordinates for placeID - ${placeId} is - ${coordinates}`
+          );
 
           // Step 4: Store in cache
           placeCache = await createPlaceCache({
@@ -225,7 +243,9 @@ const processContentAnalysisAsync = async (
             utcOffsetMinutes: placeDetails.utcOffsetMinutes ?? null,
           });
 
-          req.logger?.debug(`Created new entry in place cache ${placeCache.id} for placeID ${placeId}`);
+          req.logger?.debug(
+            `Created new entry in place cache ${placeCache.id} for placeID ${placeId}`
+          );
         } else {
           req.logger?.debug(`Found place id - ${placeId} in place cache`);
           coordinates = { lat: placeCache.lat, lng: placeCache.lng };
@@ -243,14 +263,22 @@ const processContentAnalysisAsync = async (
           description: analysis.additional_info ?? "",
         });
 
-        req.logger?.info(`Created Pin - ${pin.id} with content_id - ${contentId} and place_id - ${placeCacheId}`);
+        req.logger?.info(
+          `Created Pin - ${pin.id} with content_id - ${contentId} and place_id - ${placeCacheId}`
+        );
       })
     );
 
     console.log(`✅ Async processing completed for content ${contentId}`);
   } catch (error) {
-    console.error(`❌ Error in async processing for content ${contentId}:`, error);
-    req.logger?.error(`Async processing failed for content ${contentId}:`, error);
+    console.error(
+      `❌ Error in async processing for content ${contentId}:`,
+      error
+    );
+    req.logger?.error(
+      `Async processing failed for content ${contentId}:`,
+      error
+    );
   }
 };
 
@@ -312,8 +340,12 @@ app.post(
         contentThumbnail
       );
 
-      console.log(`✅ Content created with ID: ${newContent.id}. Starting async processing...`);
-      req.logger?.info(`Content created: ${newContent.id}. Processing will continue asynchronously.`);
+      console.log(
+        `✅ Content created with ID: ${newContent.id}. Starting async processing...`
+      );
+      req.logger?.info(
+        `Content created: ${newContent.id}. Processing will continue asynchronously.`
+      );
 
       // Start async processing in the background (don't await)
       processContentAnalysisAsync(newContent.id, description, req);
@@ -334,8 +366,9 @@ app.post(
         },
         processing: {
           status: "in_progress",
-          message: "AI analysis and pin creation are being processed in the background"
-        }
+          message:
+            "AI analysis and pin creation are being processed in the background",
+        },
       });
     } catch (error) {
       console.log("Look at exact error", error);
@@ -433,16 +466,16 @@ app.delete(
       // Verify user has access to this trip and is an owner
       const userRole = await getUserRoleInTrip(currentUser.id, tripId);
       if (!userRole) {
-        res.status(403).json({ 
-          error: "You don't have access to this trip" 
+        res.status(403).json({
+          error: "You don't have access to this trip",
         });
         return;
       }
 
       // Only owners can delete trips
       if (userRole !== "owner") {
-        res.status(403).json({ 
-          error: "Only trip owners can delete trips" 
+        res.status(403).json({
+          error: "Only trip owners can delete trips",
         });
         return;
       }
@@ -456,7 +489,7 @@ app.delete(
       // - Message entries
       // PlaceCache remains untouched as intended
       await prisma.trip.delete({
-        where: { id: tripId }
+        where: { id: tripId },
       });
 
       req.logger?.info(
@@ -466,13 +499,13 @@ app.delete(
       res.status(200).json({
         success: true,
         message: "Trip and all related data deleted successfully",
-        deletedTripId: tripId
+        deletedTripId: tripId,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({
           error: "Invalid input data",
-          details: error.errors
+          details: error.errors,
         });
       } else {
         console.error("Error deleting trip:", error);
@@ -714,7 +747,7 @@ app.get(
       // Fetch content, pins, and place cache with blocking logic
       const { contentList, pinsList, placeCacheList } =
         await getTripContentData(tripId, lastLoginDate, currentUser.id);
-      
+
       const trip = await getTripById(tripId);
       const nested = await getContentPinsPlaceNested(tripId, currentUser.id);
 
@@ -725,7 +758,8 @@ app.get(
         ),
       ];
 
-      const users = userIds.length > 0 ? await getUsersByIds(userIds, currentUser.id) : [];
+      const users =
+        userIds.length > 0 ? await getUsersByIds(userIds, currentUser.id) : [];
 
       res.status(200).json({
         contents: contentList,
@@ -733,10 +767,10 @@ app.get(
         placeCaches: placeCacheList,
         nestedData: nested,
         trip,
-        users: users.map(user => ({
+        users: users.map((user) => ({
           id: user.id,
           name: user.name,
-          // Don't expose sensitive info like email and phone number
+          email: user.email,
         })),
       });
     } catch (error) {
@@ -779,7 +813,7 @@ app.get(
       }
 
       const { tripId } = req.query;
-      
+
       if (!tripId) {
         res.status(400).json({ error: "tripId is required" });
         return;
@@ -824,7 +858,6 @@ app.post(
   }
 );
 
-
 app.get(
   "/api/getMessagesByTrip",
   authenticate,
@@ -837,7 +870,7 @@ app.get(
       }
 
       const { tripId, before, limit = 20 } = req.query;
-      
+
       if (!tripId) {
         res.status(400).json({ error: "tripId is required" });
         return;
@@ -852,7 +885,7 @@ app.get(
 
       const queryLimit = parseInt(limit as string, 10);
       let beforeDate: Date | undefined = undefined;
-      
+
       if (before) {
         const beforeMessage = await getMessageById(
           tripId as string,
@@ -864,14 +897,14 @@ app.get(
         }
         beforeDate = beforeMessage?.createdAt;
       }
-      
+
       const messages = await getMessagesByTime(
         tripId as string,
         beforeDate as any,
         queryLimit as number,
         currentUser.id
       );
-      
+
       res.json(messages);
     } catch (err) {
       console.error(err);
@@ -1180,11 +1213,13 @@ const ManualPinSchema = z.object({
 // Notification schemas
 const RegisterFcmTokenSchema = z.object({
   fcmToken: z.string().min(1, "FCM token is required"),
-  deviceInfo: z.object({
-    platform: z.string().optional(),
-    version: z.string().optional(),
-    deviceId: z.string().optional(),
-  }).optional(),
+  deviceInfo: z
+    .object({
+      platform: z.string().optional(),
+      version: z.string().optional(),
+      deviceId: z.string().optional(),
+    })
+    .optional(),
 });
 
 const UnregisterFcmTokenSchema = z.object({
@@ -1192,7 +1227,9 @@ const UnregisterFcmTokenSchema = z.object({
 });
 
 const SendNotificationSchema = z.object({
-  userIds: z.array(z.string().uuid()).min(1, "At least one user ID is required"),
+  userIds: z
+    .array(z.string().uuid())
+    .min(1, "At least one user ID is required"),
   title: z.string().min(1, "Title is required"),
   body: z.string().min(1, "Body is required"),
   data: z.record(z.string()).optional(),
@@ -1483,21 +1520,24 @@ app.delete(
 
       // Check if user owns the content OR is a trip owner
       let canDelete = false;
-      
+
       if (content.userId === currentUser.id) {
         // User owns the content
         canDelete = true;
       } else {
         // Check if user is a trip owner
-        const userRole = await getUserRoleInTrip(currentUser.id, content.tripId);
+        const userRole = await getUserRoleInTrip(
+          currentUser.id,
+          content.tripId
+        );
         if (userRole === "owner") {
           canDelete = true;
         }
       }
 
       if (!canDelete) {
-        res.status(403).json({ 
-          error: "You don't have permission to delete this content" 
+        res.status(403).json({
+          error: "You don't have permission to delete this content",
         });
         return;
       }
@@ -1508,7 +1548,7 @@ app.delete(
       // - All associated Pin records (via onDelete: Cascade)
       // PlaceCache remains untouched as intended
       await prisma.content.delete({
-        where: { id: contentId }
+        where: { id: contentId },
       });
 
       req.logger?.info(
@@ -1518,13 +1558,13 @@ app.delete(
       res.status(200).json({
         success: true,
         message: "Content and associated pins deleted successfully",
-        deletedContentId: contentId
+        deletedContentId: contentId,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({
           error: "Invalid input data",
-          details: error.errors
+          details: error.errors,
         });
       } else {
         console.error("Error deleting content:", error);
@@ -1927,10 +1967,9 @@ app.delete(
   }
 );
 
-
 const UpdateContentSchema = z.object({
   content_id: z.string().uuid(),
-  content: z.string().min(1, "Content/transcript is required")
+  content: z.string().min(1, "Content/transcript is required"),
 });
 
 // Add this endpoint to your main Express app file
@@ -1938,18 +1977,19 @@ app.post(
   "/api/update-content",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      
       const validatedData = UpdateContentSchema.parse(req.body);
       const { content_id, content } = validatedData;
 
-      console.log(`Received request to update content: content_id=${content_id}`);
+      console.log(
+        `Received request to update content: content_id=${content_id}`
+      );
       req.logger?.info(
         `Update content request received: content_id=${content_id}`
       );
 
       // Verify the content exists and user has access
       const existingContent = await prisma.content.findUnique({
-        where: { id: content_id }
+        where: { id: content_id },
       });
 
       if (!existingContent) {
@@ -1978,13 +2018,13 @@ app.post(
 
       // Update content with new transcript data and analysis
       await updateContent(content_id, analysis, title, pinsCount);
-      
+
       // Also update the rawData field with the transcript
       await prisma.content.update({
         where: { id: content_id },
         data: {
           rawData: description,
-        }
+        },
       });
 
       req.logger?.debug(
@@ -1993,23 +2033,33 @@ app.post(
 
       // Generate embeddings for the updated content in the background
       try {
-        console.log(`🔄 Starting embedding generation for updated content ${content_id}...`);
+        console.log(
+          `🔄 Starting embedding generation for updated content ${content_id}...`
+        );
         generateContentEmbeddings(content_id)
           .then(() => {
-            console.log(`✅ Embeddings generated successfully for content ${content_id}`);
+            console.log(
+              `✅ Embeddings generated successfully for content ${content_id}`
+            );
           })
           .catch((embeddingError) => {
-            console.error(`❌ Failed to generate embeddings for content ${content_id}:`, embeddingError);
+            console.error(
+              `❌ Failed to generate embeddings for content ${content_id}:`,
+              embeddingError
+            );
             // Don't throw here - embedding generation failure shouldn't affect the main flow
           });
       } catch (embeddingError) {
-        console.error(`❌ Error starting embedding generation for content ${content_id}:`, embeddingError);
+        console.error(
+          `❌ Error starting embedding generation for content ${content_id}:`,
+          embeddingError
+        );
         // Continue with the main flow even if embedding generation fails
       }
 
       // Delete existing pins for this content before creating new ones
       await prisma.pin.deleteMany({
-        where: { contentId: content_id }
+        where: { contentId: content_id },
       });
 
       // Process each analysis object in the list (same logic as extract-lat-long)
@@ -2042,14 +2092,18 @@ app.post(
             );
 
             // Use coordinates from place details instead of separate API call
-            coordinates = placeDetails.location ? {
-              lat: placeDetails.location.latitude,
-              lng: placeDetails.location.longitude
-            } : null;
+            coordinates = placeDetails.location
+              ? {
+                  lat: placeDetails.location.latitude,
+                  lng: placeDetails.location.longitude,
+                }
+              : null;
 
             if (!coordinates) {
               req.logger?.error(`No coordinates found for place: ${full_loc}`);
-              throw new Error(`Could not get coordinates for place: ${full_loc}`);
+              throw new Error(
+                `Could not get coordinates for place: ${full_loc}`
+              );
             }
 
             req.logger?.debug(
@@ -2116,7 +2170,7 @@ app.post(
       res.status(200).json({
         message: "Content updated successfully with transcript analysis",
         contentId: content_id,
-        analysis: responses
+        analysis: responses,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -2147,9 +2201,7 @@ app.post(
 
       await registerFcmToken(currentUser.id, fcmToken, deviceInfo);
 
-      req.logger?.info(
-        `FCM token registered for user ${currentUser.id}`
-      );
+      req.logger?.info(`FCM token registered for user ${currentUser.id}`);
 
       res.status(200).json({
         success: true,
@@ -2185,9 +2237,7 @@ app.delete(
 
       await unregisterFcmToken(fcmToken);
 
-      req.logger?.info(
-        `FCM token unregistered for user ${currentUser.id}`
-      );
+      req.logger?.info(`FCM token unregistered for user ${currentUser.id}`);
 
       res.status(200).json({
         success: true,
@@ -2219,7 +2269,8 @@ app.post(
         return;
       }
 
-      const { userIds, title, body, data, imageUrl } = SendNotificationSchema.parse(req.body);
+      const { userIds, title, body, data, imageUrl } =
+        SendNotificationSchema.parse(req.body);
 
       const result = await sendNotificationToUsers(userIds, {
         title,
@@ -2274,7 +2325,9 @@ app.post(
       //   return;
       // }
 
-      const { title, body, data, imageUrl } = BroadcastNotificationSchema.parse(req.body);
+      const { title, body, data, imageUrl } = BroadcastNotificationSchema.parse(
+        req.body
+      );
 
       const result = await sendBroadcastNotification({
         title,
