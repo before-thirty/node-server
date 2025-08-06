@@ -35,7 +35,6 @@ import {
   getUserByFirebaseId,
   createTripAndTripUser,
   addUserToTrip,
-  getUsersByIds,
   getUsersFromTrip,
   addMessage,
   getMessageById,
@@ -56,6 +55,7 @@ import {
   verifyPinAccess,
   getPublicTrips,
   getUserRoleInTrip,
+  getUsersWithContentInTrip,
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "./middleware/currentUser";
@@ -438,7 +438,129 @@ app.post(
   }
 );
 
-// API to delete a trip and all related data (except place cache)
+// API to leave a trip (removes user from trip, keeps content visible)
+app.delete(
+  "/api/leave-trip",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { tripId } = LeaveTripSchema.parse(req.body);
+
+      req.logger?.info(
+        `Leave trip request: tripId=${tripId}, user=${currentUser.id}`
+      );
+
+      // Verify the trip exists
+      const trip = await getTripById(tripId);
+      if (!trip) {
+        res.status(404).json({ error: "Trip not found" });
+        return;
+      }
+
+      // Verify user is a member of this trip
+      const userRole = await getUserRoleInTrip(currentUser.id, tripId);
+      if (!userRole) {
+        res.status(403).json({ 
+          error: "You are not a member of this trip" 
+        });
+        return;
+      }
+
+      // Check if user is the only owner and needs to transfer ownership
+      const ownerCount = await prisma.tripUser.count({
+        where: { tripId, role: "owner" }
+      });
+      
+      let newOwnerName = null;
+      if (userRole === "owner" && ownerCount === 1) {
+        // Find other members to transfer ownership to (oldest member first)
+        const otherMembers = await prisma.tripUser.findMany({
+          where: { 
+            tripId, 
+            userId: { not: currentUser.id },
+            role: "member"
+          },
+          include: { user: { select: { name: true } } },
+          orderBy: { createdAt: "asc" } // Oldest member first
+        });
+
+        if (otherMembers.length > 0) {
+          // Transfer ownership to the longest-standing member
+          const newOwner = otherMembers[0];
+          await prisma.tripUser.update({
+            where: {
+              tripId_userId: {
+                tripId,
+                userId: newOwner.userId
+              }
+            },
+            data: { role: "owner" }
+          });
+          
+          newOwnerName = newOwner.user.name;
+          req.logger?.info(
+            `Ownership of trip ${tripId} transferred from ${currentUser.id} to ${newOwner.userId} (${newOwnerName})`
+          );
+        }
+        // If no other members exist, user still leaves and trip becomes ownerless
+      }
+
+      // Remove user from trip (their content remains visible to other members)
+      await prisma.tripUser.delete({
+        where: {
+          tripId_userId: {
+            tripId,
+            userId: currentUser.id
+          }
+        }
+      });
+
+      // Remove user's UserPlaceMustDo entries for this trip
+      await prisma.userPlaceMustDo.deleteMany({
+        where: {
+          tripId,
+          userId: currentUser.id
+        }
+      });
+
+      req.logger?.info(
+        `User ${currentUser.id} successfully left trip ${tripId}. Their content remains visible to other members.`
+      );
+
+      const responseMessage = newOwnerName 
+        ? `Successfully left trip. Ownership transferred to ${newOwnerName}. Your shared content remains visible to other members.`
+        : "Successfully left trip. Your shared content remains visible to other members.";
+
+      res.status(200).json({
+        success: true,
+        message: responseMessage,
+        action: "left_trip",
+        ownershipTransferred: !!newOwnerName,
+        newOwner: newOwnerName,
+        contentNote: "Your pins and content shared in this trip will remain visible to other members"
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: "Invalid input data",
+          details: error.errors
+        });
+      } else {
+        console.error("Error leaving trip:", error);
+        req.logger?.error(`Failed to leave trip: ${error}`);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
+// API to delete a trip (owners only - deletes entire trip and all data)
 app.delete(
   "/api/delete-trip",
   authenticate,
@@ -751,15 +873,8 @@ app.get(
       const trip = await getTripById(tripId);
       const nested = await getContentPinsPlaceNested(tripId, currentUser.id);
 
-      // Get user IDs from content, filtering out blocked users
-      const userIds = [
-        ...new Set(
-          contentList.map((content) => content.userId).filter(Boolean)
-        ),
-      ];
-
-      const users =
-        userIds.length > 0 ? await getUsersByIds(userIds, currentUser.id) : [];
+      // Get users who have contributed content to this trip (includes ex-members)
+      const contentUsers = await getUsersWithContentInTrip(tripId, currentUser.id);
 
       res.status(200).json({
         contents: contentList,
@@ -767,10 +882,13 @@ app.get(
         placeCaches: placeCacheList,
         nestedData: nested,
         trip,
-        users: users.map((user) => ({
+        users: contentUsers.map(user => ({
           id: user.id,
           name: user.name,
-          email: user.email,
+          displayName: user.displayName,
+          membershipStatus: user.membershipStatus,
+          role: user.role,
+          email: user.email
         })),
       });
     } catch (error) {
@@ -1186,6 +1304,10 @@ const DeletePinSchema = z.object({
 });
 
 const DeleteTripSchema = z.object({
+  tripId: z.string().uuid(),
+});
+
+const LeaveTripSchema = z.object({
   tripId: z.string().uuid(),
 });
 

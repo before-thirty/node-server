@@ -1259,3 +1259,49 @@ export const getUserRoleInTrip = async (
   
   return tripUser?.role || null;
 };
+
+// Get users who have contributed content to a trip (includes current members and ex-members)
+export const getUsersWithContentInTrip = async (
+  tripId: string, 
+  currentUserId: string
+) => {
+  // Get blocked user IDs
+  const blockedUserIds = await getBlockedUserIds(currentUserId);
+  
+  // Get all users who have content in this trip
+  const contentUsers = await prisma.user.findMany({
+    where: {
+      contents: {
+        some: {
+          tripId: tripId,
+        }
+      },
+      id: {
+        notIn: blockedUserIds
+      },
+      isBlocked: false
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      tripUsers: {
+        where: { tripId },
+        select: {
+          role: true,
+          createdAt: true
+        }
+      }
+    }
+  });
+
+  // Map users with their membership status
+  return contentUsers.map(user => ({
+    id: user.id,
+    name: user.name,
+    membershipStatus: user.tripUsers.length > 0 ? 'current' : 'former',
+    role: user.tripUsers.length > 0 ? user.tripUsers[0].role : null,
+    displayName: user.tripUsers.length > 0 ? user.name : `${user.name} (Former Member)`,
+    email:user.email
+  }));
+};
