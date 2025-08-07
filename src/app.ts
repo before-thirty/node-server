@@ -112,7 +112,7 @@ const ContentSchema = z.object({
   url: z.string(),
   content: z.string().optional(),
   trip_id: z.string(),
-  user_notes: z.string().optional(),
+  user_notes: z.string().optional()
 });
 
 const UserTripSchema = z.object({
@@ -314,9 +314,18 @@ app.post(
           `The request doesnt contains content fetching metadata from URL`
         );
         const metadata = await getMetadata(url);
-        description = [metadata?.meta.title, metadata?.meta.description]
-          .filter(Boolean)
-          .join(" ");
+
+        if (url.includes("facebook.com")){
+          req.logger?.debug(
+            `Facebook URL detected, using custom metadata extraction`
+          );
+          description = metadata?.og.title ?? "";
+        }
+        else {
+          description = [metadata?.meta.title, metadata?.meta.description]
+            .filter(Boolean)
+            .join(" ");
+        }
         contentThumbnail = metadata?.og.image ?? "";
       }
 
