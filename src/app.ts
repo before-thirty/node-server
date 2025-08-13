@@ -28,6 +28,7 @@ import {
   createContent,
   createUserTrip,
   updateContent,
+  appendToContent,
   getPlaceCacheById,
   createPin,
   getTripById,
@@ -48,6 +49,7 @@ import {
   unmarkPlaceAsMustDo,
   updateUserNotes,
   deletePin,
+  findExistingContentByUrl,
   isUserInTrip,
   verifyPlaceExists,
   verifyTripExists,
@@ -90,9 +92,23 @@ app.use("/api/moderation", moderationRoutes);
 //   "/.well-known",
 //   express.static(path.join(process.cwd(), ".well-known"))
 // );
+const PORT = process.env.PORT || 5000;
+const baseUrl = process.env.BASE_URL || 'http://localhost' + `:${PORT}`;
+
+const getFinalUrl = async (url: string) => {
+  const res = await fetch(url, { redirect: "follow" }); // follows redirects automatically
+  return res.url; // gives final resolved URL after following redirects
+};
+
+
+
 const getMetadata = async (url: string) => {
   try {
-    const result = await parser(url);
+    const finalUrl = await getFinalUrl(url);
+    console.log("Resolved URL:", finalUrl);
+
+    const result = await parser(finalUrl);
+
     return result;
   } catch (err) {
     console.error("Error parsing metadata:", err);
@@ -100,19 +116,46 @@ const getMetadata = async (url: string) => {
   }
 };
 
+
+const getTikTokMetadata = async (videoUrl: string) => {
+  try {
+    console.log(`Fetching metadata for: ${videoUrl}`);
+
+    const response = await fetch("http://18.195.148.72:80/share-meta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: videoUrl }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch metadata: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("Received TikTok metadata:", data);
+    const combined = [data.title, data.desc].filter(Boolean).join(" ");
+    return { description: combined };
+  } catch (error) {
+    console.error('Error fetching TikTok metadata:', error);
+    return null;
+  }
+}
+
+
 const UserSchema = z.object({
   id: z.string().uuid().optional(), // UUID
   name: z.string().min(1, "User name is required"),
   email: z.string(),
   phoneNumber: z.string(),
-  firebaseId: z.string(),
+  firebaseId: z.string()
 });
 
 const ContentSchema = z.object({
   url: z.string(),
   content: z.string().optional(),
   trip_id: z.string(),
-  user_notes: z.string().optional()
+  user_notes: z.string().optional(),
+  user_id: z.string().uuid()
 });
 
 const UserTripSchema = z.object({
@@ -133,7 +176,8 @@ app.get("/api/status", async (req: Request, res: Response) => {
 const processContentAnalysisAsync = async (
   contentId: string,
   description: string,
-  req: Request
+  req: Request,
+  url: string
 ): Promise<void> => {
   try {
     console.log(`Starting async processing for content ${contentId}`);
@@ -151,6 +195,32 @@ const processContentAnalysisAsync = async (
     const pinsCount = analysis.filter(
       (a) => a.classification !== "Not Pinned"
     ).length;
+
+    // Check if URL already exists in content table (excluding current content)
+    console.log("URL is ", url);
+      // URL doesn't exist, fire external API calls without waiting for response
+    if (url.includes("instagram.com")) {
+      console.log("Instagram URL detected, calling analysis API");
+        fetch("https://kadshnkjadnk.pinspire.co.in/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contentId: contentId, url: url }),
+        }).catch((error) => {
+          console.error(`Failed to call Instagram analysis API for content ${contentId}:`, error);
+        });
+      } 
+    else if (url.includes("tiktok.com")) {
+      console.log("TikTok URL detected, calling analysis API");
+        fetch("https://kadshnkjadnk.pinspire.co.in/api/tiktok-analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contentId: contentId, url: url }),
+        }).catch((error) => {
+          console.error(`Failed to call TikTok analysis API for content ${contentId}:`, error);
+        });
+      
+    }
+    
     await updateContent(contentId, analysis, title, pinsCount);
 
     req.logger?.debug(
@@ -284,19 +354,19 @@ const processContentAnalysisAsync = async (
 
 app.post(
   "/api/extract-lat-long",
-  authenticate,
+  // authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const currentUser = req.currentUser;
-      if (currentUser == null) {
-        res.status(401).json({ error: "User not authenticated" });
-        throw new Error("User not authenticated");
-      }
-      const user_id = currentUser.id;
+      // const currentUser = req.currentUser;
+      // if (currentUser == null) {
+      //   res.status(401).json({ error: "User not authenticated" });
+      //   throw new Error("User not authenticated");
+      // }
+      // const user_id = currentUser.id;
       const validatedData = ContentSchema.parse(req.body);
 
       console.log(req.body);
-      const { url, content, trip_id, user_notes } = validatedData;
+      const { url, content, trip_id, user_notes, user_id } = validatedData;
 
       console.log(
         `Received request to extract lat-long: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`
@@ -313,30 +383,28 @@ app.post(
         req.logger?.debug(
           `The request doesnt contains content fetching metadata from URL`
         );
+
+        
         const metadata = await getMetadata(url);
 
-        if (url.includes("facebook.com")){
-          req.logger?.debug(
-            `Facebook URL detected, using custom metadata extraction`
-          );
-          description = metadata?.og.title ?? "";
-        }
-        else {
-          description = [metadata?.meta.title, metadata?.meta.description]
-            .filter(Boolean)
-            .join(" ");
-        }
+          if (url.includes("facebook.com")){
+            req.logger?.debug(
+              `Facebook URL detected, using custom metadata extraction`
+            );
+            description = metadata?.og.title ?? "";
+          }
+          else {
+            description = [metadata?.meta.title, metadata?.meta.description]
+              .filter(Boolean)
+              .join(" ");
+          }
         contentThumbnail = metadata?.og.image ?? "";
       }
 
       console.log("Desc is ", description);
 
       if (!description) {
-        req.logger?.error(`Failed to fetch metadata for URL - ${url}`);
-        res
-          .status(404)
-          .json({ error: "Could not fetch metadata for the given URL" });
-        return;
+        req.logger?.error(`Failed to fetch metadata for URL - ${url}`);        
       }
 
       // Create a DB entry for content
@@ -357,7 +425,7 @@ app.post(
       );
 
       // Start async processing in the background (don't await)
-      processContentAnalysisAsync(newContent.id, description, req);
+      processContentAnalysisAsync(newContent.id, description, req, url);
 
       // Return immediate response with content info
       res.status(202).json({
@@ -2147,16 +2215,8 @@ app.post(
         (a) => a.classification !== "Not Pinned"
       ).length;
 
-      // Update content with new transcript data and analysis
-      await updateContent(content_id, analysis, title, pinsCount);
-
-      // Also update the rawData field with the transcript
-      await prisma.content.update({
-        where: { id: content_id },
-        data: {
-          rawData: description,
-        },
-      });
+      // Append new content data instead of replacing
+      await appendToContent(content_id, description, analysis, title);
 
       req.logger?.debug(
         `Updated content entry with transcript data ${content_id}`
@@ -2188,11 +2248,7 @@ app.post(
         // Continue with the main flow even if embedding generation fails
       }
 
-      // Delete existing pins for this content before creating new ones
-      await prisma.pin.deleteMany({
-        where: { contentId: content_id },
-      });
-
+      // Only create pins for new analysis data (don't delete existing pins)
       // Process each analysis object in the list (same logic as extract-lat-long)
       const responses = await Promise.all(
         analysis.map(async (analysis) => {
@@ -2519,7 +2575,7 @@ app.get(
 );
 
 // Start the server
-const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

@@ -45,6 +45,67 @@ export const updateContent = async (
   });
 };
 
+// Append new content data to existing Content entry (for update-content API)
+export const appendToContent = async (
+  contentId: string,
+  newContent: string,
+  newStructuredData: any,
+  newTitle?: string
+) => {
+  // First get the existing content
+  const existingContent = await prisma.content.findUnique({
+    where: { id: contentId },
+    select: {
+      rawData: true,
+      structuredData: true,
+      title: true,
+      pins_count: true,
+    },
+  });
+
+  if (!existingContent) {
+    throw new Error("Content not found");
+  }
+
+  // Parse existing structured data
+  let existingStructuredArray = [];
+  try {
+    existingStructuredArray = JSON.parse(existingContent.structuredData || "[]");
+  } catch (error) {
+    console.log("Failed to parse existing structured data, treating as empty array");
+    existingStructuredArray = [];
+  }
+
+  // Ensure both old and new structured data are arrays
+  const newStructuredArray = Array.isArray(newStructuredData) 
+    ? newStructuredData 
+    : (newStructuredData ? [newStructuredData] : []);
+
+  // Combine the structured data arrays
+  const combinedStructuredData = [...existingStructuredArray, ...newStructuredArray];
+
+  // Append raw content with a separator
+  const combinedRawData = existingContent.rawData + "\n\n--- APPENDED CONTENT ---\n\n" + newContent;
+
+  // Use the new title if provided, otherwise keep existing
+  const finalTitle = newTitle;
+
+  // Calculate new pins count from combined structured data
+  const newPinsCount = combinedStructuredData.filter(
+    (item: any) => item.classification && item.classification !== "Not Pinned"
+  ).length;
+
+  return await prisma.content.update({
+    where: { id: contentId },
+    data: {
+      rawData: combinedRawData,
+      structuredData: JSON.stringify(combinedStructuredData),
+      title: finalTitle,
+      pins_count: newPinsCount,
+    },
+  });
+};
+
 // Function to get the PlaceCache by placeId
 export const getPlaceCacheById = async (placeId: string) => {
   return await prisma.placeCache.findUnique({
@@ -568,6 +629,23 @@ export const deletePin = async (pinId: string): Promise<void> => {
     console.error("Error deleting pin:", error);
     throw error;
   }
+};
+
+// Helper function to find existing content by URL (excluding current content ID)
+export const findExistingContentByUrl = async (url: string, excludeContentId: string) => {
+  return await prisma.content.findFirst({
+    where: { 
+      url: url,
+      id: { not: excludeContentId }
+    },
+    select: {
+      id: true,
+      rawData: true,
+      createdAt: true,
+      userId: true,
+      tripId: true,
+    },
+  });
 };
 
 // === Verification Helper Functions ===
