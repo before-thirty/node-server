@@ -1442,6 +1442,10 @@ const BroadcastNotificationSchema = z.object({
   imageUrl: z.string().url().optional(),
 });
 
+const UpdateBucketListSchema = z.object({
+  countries: z.array(z.string()).min(1, "At least one country must be selected"),
+});
+
 // API to mark a place as must-do for a trip
 app.post(
   "/api/mark-place-must-do",
@@ -2570,6 +2574,56 @@ app.get(
     } catch (error) {
       console.error("Error fetching notification stats:", error);
       res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// API to update user's bucket list countries
+app.put(
+  "/api/update-bucket-list",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { countries } = UpdateBucketListSchema.parse(req.body);
+
+      // Update user's bucket list countries
+      const updatedUser = await prisma.user.update({
+        where: { id: currentUser.id },
+        data: { bucketListCountries: countries },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          bucketListCountries: true,
+          updatedAt: true,
+        },
+      });
+
+      req.logger?.info(
+        `Bucket list countries updated for user ${currentUser.id}: ${countries.join(', ')}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Bucket list countries updated successfully",
+        user: updatedUser,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: "Invalid input data",
+          details: error.errors,
+        });
+      } else {
+        console.error("Error updating bucket list countries:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
     }
   }
 );
