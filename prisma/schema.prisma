@@ -81,18 +81,19 @@ model TripUser {
 }
 
 model Content {
-  id                         String   @id @default(uuid())
+  id                         String        @id @default(uuid())
   url                        String
   rawData                    String
   structuredData             String
   userId                     String
   tripId                     String
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  createdAt                  DateTime      @default(now())
+  updatedAt                  DateTime      @updatedAt
   userNotes                  String?
-  pins_count                 Int      @default(0)
-  thumbnail                  String   @default("")
-  title                      String   @default("")
+  pins_count                 Int           @default(0)
+  thumbnail                  String        @default("")
+  title                      String        @default("")
+  status                     ContentStatus @default(PROCESSING)
   
   // Content moderation fields
   isHidden                   Boolean  @default(false)  // Hidden due to reports
@@ -286,6 +287,14 @@ enum ReportStatus {
   REVIEWED
   ACTIONED      // Content hidden or user blocked
   DISMISSED     // Report was reviewed but no action taken
+  
+  @@schema("app_data")
+}
+
+enum ContentStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
   
   @@schema("app_data")
 }
