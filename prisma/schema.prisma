@@ -22,6 +22,7 @@ model User {
   isBlocked       Boolean            @default(false) // Global block status
   blockedAt       DateTime?          // When user was blocked
   blockReason     String?            // Reason for blocking
+  bucketListCountries String[]       @default([]) // Array of country IDs from bucket list selection
   Message         ChatMessage[]
   contents        Content[]
   tripUsers       TripUser[]
