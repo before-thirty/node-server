@@ -101,6 +101,7 @@ export const appendToContent = async (
       structuredData: JSON.stringify(combinedStructuredData),
       title: finalTitle,
       pins_count: newPinsCount,
+      status: "COMPLETED"
     },
   });
 };
