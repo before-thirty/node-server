@@ -56,6 +56,7 @@ export const emitContentProcessingStatus = (
     contentId,
     status,
     timestamp: new Date().toISOString(),
+    tripId,
     ...data
   };
 

@@ -2197,7 +2197,7 @@ app.post(
       req.logger?.info(
         `Update content request received: content_id=${content_id}`
       );
-
+      
       // Verify the content exists and user has access
       const existingContent = await prisma.content.findUnique({
         where: { id: content_id },
@@ -2210,7 +2210,7 @@ app.post(
 
       const trip_id = existingContent.tripId;
       const description = content;
-
+      
       console.log("Processing transcript content:", description);
 
       // Extract structured data using AI (same as extract-lat-long)
@@ -2413,7 +2413,7 @@ app.post(
         );
         // Continue with the main flow even if embedding generation fails
       }
-
+      
       // Emit completion status via WebSocket
       emitContentProcessingStatus(trip_id, content_id, 'completed', {
         pinsCount: actualPinsCount,
