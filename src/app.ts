@@ -1,9 +1,11 @@
 // Importing required modules
 import express, { Request, Response, NextFunction } from "express";
+import { createServer } from "http";
 import morgan from "morgan";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import cors from "cors";
+import { initializeWebSocket } from "./services/websocketService";
 import { requestLogger } from "./middleware/logger";
 import {
   extractLocationAndClassify,
@@ -58,6 +60,7 @@ import {
   getPublicTrips,
   getUserRoleInTrip,
   getUsersWithContentInTrip,
+  appendPinCount
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "./middleware/currentUser";
@@ -73,6 +76,7 @@ import {
   sendBroadcastNotification,
   getUserNotificationStats,
 } from "./services/notificationService";
+import { emitContentProcessingStatus } from "./services/websocketService";
 
 const prisma = new PrismaClient();
 
@@ -323,6 +327,7 @@ const processContentAnalysisAsync = async (
 
         placeCacheId = placeCache.id;
 
+
         // Step 5: Create Pin linked to PlaceCache
         const pin = await createPin({
           name: analysis.name ?? "",
@@ -423,6 +428,9 @@ app.post(
       req.logger?.info(
         `Content created: ${newContent.id}. Processing will continue asynchronously.`
       );
+
+      // Emit processing status via WebSocket
+      emitContentProcessingStatus(trip_id, newContent.id, 'processing');
 
       // Start async processing in the background (don't await)
       processContentAnalysisAsync(newContent.id, description, req, url);
@@ -2189,7 +2197,7 @@ app.post(
       req.logger?.info(
         `Update content request received: content_id=${content_id}`
       );
-
+      
       // Verify the content exists and user has access
       const existingContent = await prisma.content.findUnique({
         where: { id: content_id },
@@ -2202,7 +2210,7 @@ app.post(
 
       const trip_id = existingContent.tripId;
       const description = content;
-
+      
       console.log("Processing transcript content:", description);
 
       // Extract structured data using AI (same as extract-lat-long)
@@ -2219,8 +2227,162 @@ app.post(
         (a) => a.classification !== "Not Pinned"
       ).length;
 
+      
+
+      // Only create pins for new analysis data (don't delete existing pins)
+      // Process each analysis object in the list (same logic as extract-lat-long)
+      const responses = await Promise.allSettled(
+        analysis.map(async (analysis) => {
+          try {
+            if (analysis.classification === "Not Pinned") {
+              return null;
+            }
+            const full_loc =
+              (analysis.name ?? "") + " " + (analysis.location ?? "");
+
+            // Step 1: Get Place ID
+            const placeId = await getPlaceId(full_loc, req);
+            let coordinates;
+            let placeCacheId;
+
+            // Step 2: Check if the place exists in the cache
+            let placeCache = await getPlaceCacheById(placeId);
+
+            if (!placeCache) {
+              req.logger?.debug(
+                "Could not find place in place Cache.. getting full place details"
+              );
+              // Step 3: If not in cache, fetch full place details (includes coordinates)
+              const placeDetails = await getFullPlaceDetails(full_loc, req);
+
+              req.logger?.debug(
+                `Place details for placeID - ${placeId} is - ${placeDetails}`
+              );
+
+              // Use coordinates from place details instead of separate API call
+              coordinates = placeDetails.location
+                ? {
+                    lat: placeDetails.location.latitude,
+                    lng: placeDetails.location.longitude,
+                  }
+                : null;
+
+              if (!coordinates) {
+                req.logger?.error(`No coordinates found for place: ${full_loc}`);
+                return null;
+              }
+
+              req.logger?.debug(
+                `Coordinates for placeID - ${placeId} is - ${coordinates}`
+              );
+
+              // Step 4: Store in cache
+              placeCache = await createPlaceCache({
+                placeId: placeDetails.id,
+                name: placeDetails.name,
+                rating: placeDetails.rating ?? null,
+                userRatingCount: placeDetails.userRatingCount ?? null,
+                websiteUri: placeDetails.websiteUri ?? null,
+                currentOpeningHours: placeDetails.currentOpeningHours,
+                regularOpeningHours: placeDetails.regularOpeningHours,
+                lat: coordinates.lat,
+                lng: coordinates.lng,
+                images: placeDetails.images ?? [],
+                utcOffsetMinutes: placeDetails.utcOffsetMinutes ?? null,
+              });
+
+              req.logger?.debug(
+                `Created new entry in place cache ${placeCache.id} for placeID ${placeId}`
+              );
+            } else {
+              req.logger?.debug(`Found place id - ${placeId} in place cache`);
+              coordinates = {
+                lat: placeCache.lat,
+                lng: placeCache.lng,
+              };
+            }
+
+            placeCacheId = placeCache.id;
+            // Check if a pin with this placeCacheId already exists for this content
+            const existingPin = await prisma.pin.findFirst({
+              where: {
+                contentId: content_id,
+                placeCacheId: placeCacheId,
+              },
+            });
+
+            if (existingPin) {
+              req.logger?.info(
+                `Pin already exists for placeCacheId ${placeCacheId} and contentId ${content_id}. Skipping creation.`
+              );
+              return null;
+            }
+
+            // Step 5: Create Pin linked to PlaceCache
+            const pin = await createPin({
+              name: analysis.name ?? "",
+              category: analysis.classification ?? "",
+              contentId: content_id,
+              placeCacheId: placeCacheId,
+              coordinates: coordinates,
+              description: analysis.additional_info ?? "",
+            });
+            req.logger?.info(
+              `Created Pin - ${pin.id} with content_id - ${content_id} and place_id - ${placeCacheId}`
+            );
+
+            return {
+              ...analysis,
+              placeCacheId,
+              coordinates,
+              placeDetails: {
+                name: placeCache.name,
+                rating: placeCache.rating,
+                userRatingCount: placeCache.userRatingCount,
+                websiteUri: placeCache.websiteUri,
+                currentOpeningHours: placeCache.currentOpeningHours,
+                regularOpeningHours: placeCache.regularOpeningHours,
+                images: placeCache.images,
+                utcOffsetMinutes: placeCache.utcOffsetMinutes,
+              },
+            };
+          } catch (error) {
+            req.logger?.error(`Failed to process analysis item "${analysis.name}" at location "${analysis.location}":`, error);
+            console.error(`❌ Google Places API failed for "${analysis.name}" at "${analysis.location}":`, error);
+            // Return null so this item is skipped but processing continues for other items
+            return null;
+          }
+        })
+      );
+
+      // const content_status = await prisma.content.findUnique({
+      //   where: { id: content_id },
+      //   select: { tripId: true, title: true, pins_count: true }
+      // });
+      
+      // if (content_status) {
+      //   emitContentProcessingStatus(content_status.tripId, content_id, 'completed', {
+      //     pinsCount: content_status.pins_count,
+      //     title: content_status.title
+      //   });
+      // }
+
+      // Extract successful results from Promise.allSettled
+      const successfulResponses = responses
+        .filter(result => result.status === 'fulfilled' && result.value !== null)
+        .map(result => (result as PromiseFulfilledResult<any>).value);
+      
+      const actualPinsCount = successfulResponses.length;
+      console.log("Pin Count : ", actualPinsCount);
+      
+      // Log any failed operations for debugging
+      const failedResponses = responses.filter(result => result.status === 'rejected');
+      if (failedResponses.length > 0) {
+        req.logger?.warn(`${failedResponses.length} pin creation operations failed, but continuing with successful ones`);
+      }
+      
       // Append new content data instead of replacing
-      await appendToContent(content_id, description, analysis, title);
+      await appendToContent(content_id, description, analysis, actualPinsCount, title);
 
       req.logger?.debug(
         `Updated content entry with transcript data ${content_id}`
@@ -2251,117 +2413,20 @@ app.post(
         );
         // Continue with the main flow even if embedding generation fails
       }
-
-      // Only create pins for new analysis data (don't delete existing pins)
-      // Process each analysis object in the list (same logic as extract-lat-long)
-      const responses = await Promise.all(
-        analysis.map(async (analysis) => {
-          if (analysis.classification === "Not Pinned") {
-            return analysis;
-          }
-          const full_loc =
-            (analysis.name ?? "") + " " + (analysis.location ?? "");
-
-          // Step 1: Get Place ID
-          const placeId = await getPlaceId(full_loc, req);
-
-          let coordinates;
-          let placeCacheId;
-
-          // Step 2: Check if the place exists in the cache
-          let placeCache = await getPlaceCacheById(placeId);
-
-          if (!placeCache) {
-            req.logger?.debug(
-              "Could not find place in place Cache.. getting full place details"
-            );
-            // Step 3: If not in cache, fetch full place details (includes coordinates)
-            const placeDetails = await getFullPlaceDetails(full_loc, req);
-
-            req.logger?.debug(
-              `Place details for placeID - ${placeId} is - ${placeDetails}`
-            );
-
-            // Use coordinates from place details instead of separate API call
-            coordinates = placeDetails.location
-              ? {
-                  lat: placeDetails.location.latitude,
-                  lng: placeDetails.location.longitude,
-                }
-              : null;
-
-            if (!coordinates) {
-              req.logger?.error(`No coordinates found for place: ${full_loc}`);
-              throw new Error(
-                `Could not get coordinates for place: ${full_loc}`
-              );
-            }
-
-            req.logger?.debug(
-              `Coordinates for placeID - ${placeId} is - ${coordinates}`
-            );
-
-            // Step 4: Store in cache
-            placeCache = await createPlaceCache({
-              placeId: placeDetails.id,
-              name: placeDetails.name,
-              rating: placeDetails.rating ?? null,
-              userRatingCount: placeDetails.userRatingCount ?? null,
-              websiteUri: placeDetails.websiteUri ?? null,
-              currentOpeningHours: placeDetails.currentOpeningHours,
-              regularOpeningHours: placeDetails.regularOpeningHours,
-              lat: coordinates.lat,
-              lng: coordinates.lng,
-              images: placeDetails.images ?? [],
-              utcOffsetMinutes: placeDetails.utcOffsetMinutes ?? null,
-            });
-
-            req.logger?.debug(
-              `Created new entry in place cache ${placeCache.id} for placeID ${placeId}`
-            );
-          } else {
-            req.logger?.debug(`Found place id - ${placeId} in place cache`);
-            coordinates = { lat: placeCache.lat, lng: placeCache.lng };
-          }
-
-          placeCacheId = placeCache.id;
-
-          // Step 5: Create Pin linked to PlaceCache
-          const pin = await createPin({
-            name: analysis.name ?? "",
-            category: analysis.classification ?? "",
-            contentId: content_id,
-            placeCacheId: placeCacheId,
-            coordinates: coordinates,
-            description: analysis.additional_info ?? "",
-          });
-          req.logger?.info(
-            `Created Pin - ${pin.id} with content_id - ${content_id} and place_id - ${placeCacheId}`
-          );
-
-          return {
-            ...analysis,
-            placeCacheId,
-            coordinates,
-            placeDetails: {
-              name: placeCache.name,
-              rating: placeCache.rating,
-              userRatingCount: placeCache.userRatingCount,
-              websiteUri: placeCache.websiteUri,
-              currentOpeningHours: placeCache.currentOpeningHours,
-              regularOpeningHours: placeCache.regularOpeningHours,
-              images: placeCache.images,
-              utcOffsetMinutes: placeCache.utcOffsetMinutes,
-            },
-          };
-        })
-      );
+      
+      // Emit completion status via WebSocket
+      emitContentProcessingStatus(trip_id, content_id, 'completed', {
+        pinsCount: actualPinsCount,
+        title: title
+      });
 
       // Respond with the processed data
       res.status(200).json({
         message: "Content updated successfully with transcript analysis",
         contentId: content_id,
-        analysis: responses,
+        analysis: successfulResponses,
+        successfulPins: actualPinsCount,
+        failedPins: failedResponses.length,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -2578,6 +2643,58 @@ app.get(
   }
 );
 
+// API to get processing content status for user's trips
+app.get(
+  "/api/processing-content",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      // Get all trips the user is part of
+      const userTrips = await prisma.tripUser.findMany({
+        where: { userId: currentUser.id },
+        select: { tripId: true }
+      });
+
+      const tripIds = userTrips.map(trip => trip.tripId);
+
+      if (tripIds.length === 0) {
+        res.status(200).json({ processingContentIds: [] });
+        return;
+      }
+
+      // Get all content in PROCESSING status for user's trips
+      const processingContent = await prisma.content.findMany({
+        where: {
+          tripId: { in: tripIds },
+          status: 'PROCESSING'
+        },
+        select: { id: true }
+      });
+
+      const processingContentIds = processingContent.map(content => content.id);
+
+      req.logger?.info(
+        `Retrieved ${processingContentIds.length} processing content items for user ${currentUser.id}`
+      );
+
+      res.status(200).json({
+        success: true,
+        processingContentIds,
+        count: processingContentIds.length
+      });
+    } catch (error) {
+      console.error("Error fetching processing content:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
 // API to update user's bucket list countries
 app.put(
   "/api/update-bucket-list",
@@ -2629,7 +2746,12 @@ app.put(
 );
 
 // Start the server
+const httpServer = createServer(app);
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Initialize WebSocket
+const io = initializeWebSocket(httpServer);
+
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🔌 WebSocket server initialized`);
 });

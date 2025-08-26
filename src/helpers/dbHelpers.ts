@@ -50,6 +50,7 @@ export const appendToContent = async (
   contentId: string,
   newContent: string,
   newStructuredData: any,
+  actualPinsCount: number,
   newTitle?: string
 ) => {
   // First get the existing content
@@ -91,9 +92,7 @@ export const appendToContent = async (
   const finalTitle = newTitle;
 
   // Calculate new pins count from combined structured data
-  const newPinsCount = combinedStructuredData.filter(
-    (item: any) => item.classification && item.classification !== "Not Pinned"
-  ).length;
+  const newPinsCount = actualPinsCount + existingContent.pins_count
 
   return await prisma.content.update({
     where: { id: contentId },
@@ -102,9 +101,22 @@ export const appendToContent = async (
       structuredData: JSON.stringify(combinedStructuredData),
       title: finalTitle,
       pins_count: newPinsCount,
+      status: "COMPLETED"
     },
   });
 };
+
+export const appendPinCount = async (
+  contentId: string,
+  pinCount: number
+) => {
+  return await prisma.content.update({
+    where: { id: contentId },
+    data: {
+      pins_count: pinCount
+    },
+  });
+}
 
 // Function to get the PlaceCache by placeId
 export const getPlaceCacheById = async (placeId: string) => {
