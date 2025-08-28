@@ -67,8 +67,15 @@ export const getFcmTokensForUsers = async (userIds: string[]): Promise<string[]>
         userId: { in: userIds },
         isActive: true,
       },
-      select: { fcmToken: true },
+      select: { fcmToken: true, userId: true },
     });
+    
+    // Log FCM status for each user
+    userIds.forEach(userId => {
+      const userTokens = tokens.filter(t => t.userId === userId);
+      console.log(`User ${userId}: FCM ${userTokens.length > 0 ? 'found' : 'not found'}`);
+    });
+    
     return tokens.map(token => token.fcmToken);
   } catch (error) {
     console.error('Error fetching FCM tokens:', error);
@@ -82,8 +89,14 @@ export const sendNotificationToUsers = async (
   payload: NotificationPayload
 ): Promise<{ successCount: number; failureCount: number; invalidTokens: string[] }> => {
   try {
+    console.log(`Sending notification to ${userIds.length} users`);
+    
     const fcmTokens = await getFcmTokensForUsers(userIds);
-    return await sendNotificationToTokens(fcmTokens, payload);
+    const result = await sendNotificationToTokens(fcmTokens, payload);
+    
+    console.log(`Result: ${result.successCount} success, ${result.failureCount} failed`);
+    
+    return result;
   } catch (error) {
     console.error('Error sending notification to users:', error);
     throw error;
@@ -126,8 +139,6 @@ export const sendNotificationToTokens = async (
     };
 
     const response = await messaging.sendEachForMulticast(message);
-    
-    console.log(`Notification sent - Success: ${response.successCount}, Failure: ${response.failureCount}`);
     
     // Handle invalid tokens
     const invalidTokens: string[] = [];
@@ -212,18 +223,25 @@ export const sendPinAddedNotifications = async (
   contentAuthorId: string,
   pinsCount: number,
   tripName: string,
-  authorName: string
+  authorName: string,
+  contentTitle?: string
 ): Promise<void> => {
   try {
     // Send notification to the content author (trip owner/user themselves)
+    const authorTitle = `New places in ${tripName}`;
+    const authorBody = contentTitle 
+      ? `Added ${pinsCount} new ${pinsCount === 1 ? 'place' : 'places'} from ${contentTitle}`
+      : `Added ${pinsCount} new ${pinsCount === 1 ? 'place' : 'places'} to your trip`;
+    
     const authorNotificationPayload: NotificationPayload = {
-      title: `Pins added to ${tripName}`,
-      body: `We had added ${pinsCount} ${pinsCount === 1 ? 'pin' : 'pins'} to your trip - ${tripName}`,
+      title: authorTitle,
+      body: authorBody,
       data: {
         type: 'pins_added_to_own_trip',
         tripId,
         pinsCount: pinsCount.toString(),
-        tripName
+        tripName,
+        contentTitle: contentTitle || ''
       }
     };
 
@@ -236,14 +254,7 @@ export const sendPinAddedNotifications = async (
         tripId,
         userId: { not: contentAuthorId }
       },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true
-          }
-        }
-      }
+      select: { userId: true }
     });
 
     let memberResult = { successCount: 0, failureCount: 0 };
@@ -252,25 +263,27 @@ export const sendPinAddedNotifications = async (
       const memberUserIds = tripMembers.map(member => member.userId);
 
       // Create notification for other trip members
+      const memberTitle = `New places in ${tripName}`;
+      const memberBody = contentTitle
+        ? `${authorName} added ${pinsCount} new ${pinsCount === 1 ? 'place' : 'places'} from ${contentTitle}`
+        : `${authorName} added ${pinsCount} new ${pinsCount === 1 ? 'place' : 'places'}`;
+      
       const memberNotificationPayload: NotificationPayload = {
-        title: `New pins added to ${tripName}`,
-        body: `${authorName} added ${pinsCount} new ${pinsCount === 1 ? 'pin' : 'pins'} to your trip`,
+        title: memberTitle,
+        body: memberBody,
         data: {
           type: 'pins_added_by_member',
           tripId,
           pinsCount: pinsCount.toString(),
           authorId: contentAuthorId,
-          authorName
+          authorName,
+          contentTitle: contentTitle || ''
         }
       };
 
       // Send notification to other trip members
       memberResult = await sendNotificationToUsers(memberUserIds, memberNotificationPayload);
     }
-    
-    console.log(`Pin added notifications sent - Trip: ${tripId}, Author: ${authorName}, Pins: ${pinsCount}`);
-    console.log(`  - Author notified: ${authorResult.successCount > 0 ? 'Yes' : 'No'}`);
-    console.log(`  - Other members notified: ${memberResult.successCount} users`);
 
   } catch (error) {
     console.error('Error sending pin added notifications:', error);

@@ -259,7 +259,8 @@ const processContentAnalysisAsync = async (
           contentWithDetails.user.id,
           pinsCount,
           contentWithDetails.trip.name,
-          contentWithDetails.user.name
+          contentWithDetails.user.name,
+          title || contentWithDetails.title || undefined
         );
       } catch (notificationError) {
         console.error('Error sending pin added notifications:', notificationError);
@@ -2451,7 +2452,8 @@ app.post(
             existingContent.user.id,
             actualPinsCount,
             existingContent.trip.name,
-            existingContent.user.name
+            existingContent.user.name,
+            title || existingContent.title || undefined
           );
         } catch (notificationError) {
           console.error('Error sending pin added notifications:', notificationError);
@@ -2882,6 +2884,56 @@ app.put(
         req.logger?.error(`Failed to update trip name: ${error}`);
         res.status(500).json({ error: "Internal server error" });
       }
+    }
+  }
+);
+
+// Debug endpoint to check FCM tokens for a user
+app.get(
+  "/api/debug/fcm-tokens/:userId",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { userId } = req.params;
+      
+      console.log(`🔍 Debug: Checking FCM tokens for user ${userId}`);
+      
+      const tokens = await prisma.fcmToken.findMany({
+        where: { userId },
+        select: { 
+          id: true,
+          fcmToken: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          deviceInfo: true
+        },
+      });
+      
+      console.log(`📱 Found ${tokens.length} FCM tokens for user ${userId}:`);
+      tokens.forEach((token, idx) => {
+        console.log(`  ${idx + 1}. Active: ${token.isActive}, Created: ${token.createdAt.toISOString()}`);
+        console.log(`     Token: ${token.fcmToken.substring(0, 20)}...${token.fcmToken.substring(token.fcmToken.length - 10)}`);
+        console.log(`     Device: ${JSON.stringify(token.deviceInfo)}`);
+      });
+      
+      res.status(200).json({
+        success: true,
+        userId,
+        totalTokens: tokens.length,
+        activeTokens: tokens.filter(t => t.isActive).length,
+        tokens: tokens.map(token => ({
+          id: token.id,
+          isActive: token.isActive,
+          createdAt: token.createdAt,
+          updatedAt: token.updatedAt,
+          deviceInfo: token.deviceInfo,
+          tokenPreview: `${token.fcmToken.substring(0, 20)}...${token.fcmToken.substring(token.fcmToken.length - 10)}`
+        }))
+      });
+    } catch (error) {
+      console.error('Error fetching debug FCM tokens:', error);
+      res.status(500).json({ error: "Internal server error" });
     }
   }
 );
