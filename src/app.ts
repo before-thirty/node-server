@@ -75,6 +75,7 @@ import {
   sendNotificationToUsers,
   sendBroadcastNotification,
   getUserNotificationStats,
+  sendPinAddedNotifications,
 } from "./services/notificationService";
 import { emitContentProcessingStatus } from "./services/websocketService";
 
@@ -230,6 +231,41 @@ const processContentAnalysisAsync = async (
     req.logger?.debug(
       `Updated content entry with structured data ${contentId}`
     );
+
+    // Get content details for notification
+    const contentWithDetails = await prisma.content.findUnique({
+      where: { id: contentId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        trip: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    // Send notifications to trip members about pins added (if any pins were added)
+    if (pinsCount > 0 && contentWithDetails) {
+      try {
+        await sendPinAddedNotifications(
+          contentWithDetails.trip.id,
+          contentWithDetails.user.id,
+          pinsCount,
+          contentWithDetails.trip.name,
+          contentWithDetails.user.name
+        );
+      } catch (notificationError) {
+        console.error('Error sending pin added notifications:', notificationError);
+        // Don't fail the request if notifications fail
+      }
+    }
 
     // Generate embeddings for the new content in the background
     try {
@@ -2206,6 +2242,20 @@ app.post(
       // Verify the content exists and user has access
       const existingContent = await prisma.content.findUnique({
         where: { id: content_id },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true
+            }
+          },
+          trip: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
       });
 
       if (!existingContent) {
@@ -2392,6 +2442,22 @@ app.post(
       req.logger?.debug(
         `Updated content entry with transcript data ${content_id}`
       );
+
+      // Send notifications to trip members about pins added (if any pins were added)
+      if (actualPinsCount > 0) {
+        try {
+          await sendPinAddedNotifications(
+            trip_id,
+            existingContent.user.id,
+            actualPinsCount,
+            existingContent.trip.name,
+            existingContent.user.name
+          );
+        } catch (notificationError) {
+          console.error('Error sending pin added notifications:', notificationError);
+          // Don't fail the request if notifications fail
+        }
+      }
 
       // Generate embeddings for the updated content in the background
       try {

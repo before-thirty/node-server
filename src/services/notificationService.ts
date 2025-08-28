@@ -205,3 +205,59 @@ export const getUserNotificationStats = async (userId: string) => {
     throw error;
   }
 };
+
+// Send notification when pins are added to a trip
+export const sendPinAddedNotifications = async (
+  tripId: string,
+  contentAuthorId: string,
+  pinsCount: number,
+  tripName: string,
+  authorName: string
+): Promise<void> => {
+  try {
+    // Get all trip members (excluding the content author)
+    const tripMembers = await prisma.tripUser.findMany({
+      where: {
+        tripId,
+        userId: { not: contentAuthorId }
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    if (tripMembers.length === 0) {
+      console.log(`No other members found in trip ${tripId} to notify`);
+      return;
+    }
+
+    const memberUserIds = tripMembers.map(member => member.userId);
+
+    // Create notification for other trip members
+    const memberNotificationPayload: NotificationPayload = {
+      title: `New pins added to ${tripName}`,
+      body: `${authorName} added ${pinsCount} new ${pinsCount === 1 ? 'pin' : 'pins'} to your trip`,
+      data: {
+        type: 'pins_added_by_member',
+        tripId,
+        pinsCount: pinsCount.toString(),
+        authorId: contentAuthorId,
+        authorName
+      }
+    };
+
+    // Send notification to other trip members
+    const result = await sendNotificationToUsers(memberUserIds, memberNotificationPayload);
+    
+    console.log(`Pin added notifications sent - Trip: ${tripId}, Author: ${authorName}, Pins: ${pinsCount}, Notified: ${result.successCount} users`);
+
+  } catch (error) {
+    console.error('Error sending pin added notifications:', error);
+    // Don't throw - notification failures shouldn't break the main flow
+  }
+};
