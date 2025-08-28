@@ -215,6 +215,21 @@ export const sendPinAddedNotifications = async (
   authorName: string
 ): Promise<void> => {
   try {
+    // Send notification to the content author (trip owner/user themselves)
+    const authorNotificationPayload: NotificationPayload = {
+      title: `Pins added to ${tripName}`,
+      body: `We had added ${pinsCount} ${pinsCount === 1 ? 'pin' : 'pins'} to your trip - ${tripName}`,
+      data: {
+        type: 'pins_added_to_own_trip',
+        tripId,
+        pinsCount: pinsCount.toString(),
+        tripName
+      }
+    };
+
+    // Send notification to the content author
+    const authorResult = await sendNotificationToUsers([contentAuthorId], authorNotificationPayload);
+
     // Get all trip members (excluding the content author)
     const tripMembers = await prisma.tripUser.findMany({
       where: {
@@ -231,30 +246,31 @@ export const sendPinAddedNotifications = async (
       }
     });
 
-    if (tripMembers.length === 0) {
-      console.log(`No other members found in trip ${tripId} to notify`);
-      return;
-    }
-
-    const memberUserIds = tripMembers.map(member => member.userId);
-
-    // Create notification for other trip members
-    const memberNotificationPayload: NotificationPayload = {
-      title: `New pins added to ${tripName}`,
-      body: `${authorName} added ${pinsCount} new ${pinsCount === 1 ? 'pin' : 'pins'} to your trip`,
-      data: {
-        type: 'pins_added_by_member',
-        tripId,
-        pinsCount: pinsCount.toString(),
-        authorId: contentAuthorId,
-        authorName
-      }
-    };
-
-    // Send notification to other trip members
-    const result = await sendNotificationToUsers(memberUserIds, memberNotificationPayload);
+    let memberResult = { successCount: 0, failureCount: 0 };
     
-    console.log(`Pin added notifications sent - Trip: ${tripId}, Author: ${authorName}, Pins: ${pinsCount}, Notified: ${result.successCount} users`);
+    if (tripMembers.length > 0) {
+      const memberUserIds = tripMembers.map(member => member.userId);
+
+      // Create notification for other trip members
+      const memberNotificationPayload: NotificationPayload = {
+        title: `New pins added to ${tripName}`,
+        body: `${authorName} added ${pinsCount} new ${pinsCount === 1 ? 'pin' : 'pins'} to your trip`,
+        data: {
+          type: 'pins_added_by_member',
+          tripId,
+          pinsCount: pinsCount.toString(),
+          authorId: contentAuthorId,
+          authorName
+        }
+      };
+
+      // Send notification to other trip members
+      memberResult = await sendNotificationToUsers(memberUserIds, memberNotificationPayload);
+    }
+    
+    console.log(`Pin added notifications sent - Trip: ${tripId}, Author: ${authorName}, Pins: ${pinsCount}`);
+    console.log(`  - Author notified: ${authorResult.successCount > 0 ? 'Yes' : 'No'}`);
+    console.log(`  - Other members notified: ${memberResult.successCount} users`);
 
   } catch (error) {
     console.error('Error sending pin added notifications:', error);
