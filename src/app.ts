@@ -1454,6 +1454,11 @@ const UpdateBucketListSchema = z.object({
   countries: z.array(z.string()).min(1, "At least one country must be selected"),
 });
 
+const EditTripNameSchema = z.object({
+  tripId: z.string().uuid(),
+  newName: z.string().min(1, "Trip name is required").max(100, "Trip name too long"),
+});
+
 // API to mark a place as must-do for a trip
 app.post(
   "/api/mark-place-must-do",
@@ -2536,7 +2541,7 @@ app.post(
       });
 
       req.logger?.info(
-        `Notification sent by user ${currentUser.id} to ${userIds.length} users - Success: ${result.successCount}, Failed: ${result.failureCount}`
+        `Notification sent by user to ${userIds.length} users - Success: ${result.successCount}, Failed: ${result.failureCount}`
       );
 
       res.status(200).json({
@@ -2739,6 +2744,76 @@ app.put(
         });
       } else {
         console.error("Error updating bucket list countries:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
+// API to edit trip name
+app.put(
+  "/api/edit-trip-name",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { tripId, newName } = EditTripNameSchema.parse(req.body);
+
+      req.logger?.info(
+        `Edit trip name request: tripId=${tripId}, newName=${newName}, user=${currentUser.id}`
+      );
+
+      // Verify the trip exists
+      const trip = await getTripById(tripId);
+      if (!trip) {
+        res.status(404).json({ error: "Trip not found" });
+        return;
+      }
+
+      // Verify user has access to this trip and is a member
+      const userRole = await getUserRoleInTrip(currentUser.id, tripId);
+      if (!userRole) {
+        res.status(403).json({
+          error: "You don't have access to this trip",
+        });
+        return;
+      }
+
+      // Update the trip name
+      const updatedTrip = await prisma.trip.update({
+        where: { id: tripId },
+        data: { name: newName.trim() },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          updatedAt: true,
+        },
+      });
+
+      req.logger?.info(
+        `Trip name updated successfully: tripId=${tripId}, newName=${newName}, user=${currentUser.id}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Trip name updated successfully",
+        trip: updatedTrip,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: "Invalid input data",
+          details: error.errors,
+        });
+      } else {
+        console.error("Error updating trip name:", error);
+        req.logger?.error(`Failed to update trip name: ${error}`);
         res.status(500).json({ error: "Internal server error" });
       }
     }
