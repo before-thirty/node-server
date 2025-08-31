@@ -2801,6 +2801,98 @@ app.get(
   }
 );
 
+// API to get the last processing content with full details for notification
+app.get(
+  "/api/last-processing-content",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      // Get all trips the user is part of
+      const userTrips = await prisma.tripUser.findMany({
+        where: { userId: currentUser.id },
+        select: { tripId: true }
+      });
+
+      const tripIds = userTrips.map(trip => trip.tripId);
+
+      if (tripIds.length === 0) {
+        res.status(200).json({
+          success: true,
+          lastProcessingContent: null
+        });
+        return;
+      }
+
+      // Calculate the time 10 minutes ago
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+
+      // Get the most recent content in PROCESSING status for user's trips
+      // that was created within the last 10 minutes
+      const lastProcessingContent = await prisma.content.findFirst({
+        where: {
+          tripId: { in: tripIds },
+          status: 'PROCESSING',
+          createdAt: {
+            gte: tenMinutesAgo
+          }
+        },
+        include: {
+          trip: {
+            select: {
+              id: true,
+              name: true
+            }
+          },
+          user: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: 'desc' // Get the most recent one
+        }
+      });
+
+      if (!lastProcessingContent) {
+        res.status(200).json({
+          success: true,
+          lastProcessingContent: null
+        });
+        return;
+      }
+
+      req.logger?.info(
+        `Retrieved last processing content ${lastProcessingContent.id} for user ${currentUser.id}`
+      );
+
+      res.status(200).json({
+        success: true,
+        lastProcessingContent: {
+          id: lastProcessingContent.id,
+          title: lastProcessingContent.title,
+          tripId: lastProcessingContent.tripId,
+          tripName: lastProcessingContent.trip.name,
+          userId: lastProcessingContent.userId,
+          userName: lastProcessingContent.user.name,
+          createdAt: lastProcessingContent.createdAt,
+          url: lastProcessingContent.url
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching last processing content:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
 // API to update user's bucket list countries
 app.put(
   "/api/update-bucket-list",
