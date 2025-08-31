@@ -1,5 +1,3 @@
-// schema.prisma - Updated schema with content moderation and user blocking
-
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
@@ -12,57 +10,53 @@ datasource db {
 }
 
 model User {
-  id              String             @id @default(uuid())
-  name            String
-  email           String             @unique
-  phoneNumber     String
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  firebaseId      String
-  isBlocked       Boolean            @default(false) // Global block status
-  blockedAt       DateTime?          // When user was blocked
-  blockReason     String?            // Reason for blocking
-  bucketListCountries String[]       @default([]) // Array of country IDs from bucket list selection
-  Message         ChatMessage[]
-  contents        Content[]
-  tripUsers       TripUser[]
-  ShareToken      ShareToken[]
-  userPlaceMustDos UserPlaceMustDo[] // Fixed naming to be plural and consistent
-  
-  // Content and user reporting relations  
-  reportedContent   ContentReport[]  @relation("ContentReporter")
-  reportedUsers     UserReport[]     @relation("UserReporter") 
-  userReports       UserReport[]     @relation("ReportedUser")
-  
-  // User blocking relations
-  blockingUsers     UserBlock[]      @relation("BlockingUser")
-  blockedByUsers    UserBlock[]      @relation("BlockedUser")
-  
-  // FCM tokens relation
-  fcmTokens         FcmToken[]
+  id                  String            @id @default(uuid())
+  name                String
+  email               String            @unique
+  phoneNumber         String
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  firebaseId          String
+  isBlocked           Boolean           @default(false)
+  blockedAt           DateTime?
+  blockReason         String?
+  bucketListCountries String[]          @default([])
+  metadata            Json?
+  Message             ChatMessage[]
+  contents            Content[]
+  reportedContent     ContentReport[]   @relation("ContentReporter")
+  fcmTokens           FcmToken[]
+  ShareToken          ShareToken[]
+  tripUsers           TripUser[]
+  blockedByUsers      UserBlock[]       @relation("BlockedUser")
+  blockingUsers       UserBlock[]       @relation("BlockingUser")
+  userPlaceMustDos    UserPlaceMustDo[]
+  reportedUsers       UserReport[]      @relation("UserReporter")
+  userReports         UserReport[]      @relation("ReportedUser")
 
   @@schema("app_data")
 }
 
 model Trip {
-  id               String             @id @default(uuid())
+  id               String            @id @default(uuid())
   name             String
   startDate        DateTime
   endDate          DateTime
   description      String?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
   lastContentId    String?
   coverImage       String?
-  isPublic         Boolean            @default(false)
-  likes            Int?               @default(0)
-  viewCount        Int?               @default(0)
+  isPublic         Boolean           @default(false)
+  likes            Int?              @default(0)
+  viewCount        Int?              @default(0)
+  metadata         Json?
   Message          ChatMessage[]
   contents         Content[]
   ShareToken       ShareToken[]
-  last_content     Content?           @relation("LastContent", fields: [lastContentId], references: [id])
+  last_content     Content?          @relation("LastContent", fields: [lastContentId], references: [id])
   tripUsers        TripUser[]
-  userPlaceMustDos UserPlaceMustDo[]  // Added relation to must-do places in this trip
+  userPlaceMustDos UserPlaceMustDo[]
 
   @@schema("app_data")
 }
@@ -81,37 +75,32 @@ model TripUser {
 }
 
 model Content {
-  id                         String        @id @default(uuid())
+  id                         String                 @id @default(uuid())
   url                        String
   rawData                    String
   structuredData             String
   userId                     String
   tripId                     String
-  createdAt                  DateTime      @default(now())
-  updatedAt                  DateTime      @updatedAt
+  createdAt                  DateTime               @default(now())
+  updatedAt                  DateTime               @updatedAt
   userNotes                  String?
-  pins_count                 Int           @default(0)
-  thumbnail                  String        @default("")
-  title                      String        @default("")
-  status                     ContentStatus @default(PROCESSING)
-  
-  // Content moderation fields
-  isHidden                   Boolean  @default(false)  // Hidden due to reports
-  hiddenAt                   DateTime?                 // When content was hidden
-  hideReason                 String?                   // Reason for hiding
-  
-  // Embedding columns for semantic search
-  title_embedding            Unsupported("vector(1536)")?
-  raw_data_embedding         Unsupported("vector(1536)")?
-  user_notes_embedding       Unsupported("vector(1536)")?
-  structured_data_embedding  Unsupported("vector(1536)")?
+  pins_count                 Int                    @default(0)
+  thumbnail                  String                 @default("")
+  title                      String                 @default("")
+  status                     ContentStatus          @default(PROCESSING)
+  isHidden                   Boolean                @default(false)
+  hiddenAt                   DateTime?
+  hideReason                 String?
   last_embedding_update      DateTime?
-  
-  trip                       Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  user                       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pins                       Pin[]
-  unusedTripsWithLastContent Trip[]   @relation("LastContent")
+  title_embedding            Unsupported("vector")?
+  raw_data_embedding         Unsupported("vector")?
+  user_notes_embedding       Unsupported("vector")?
+  structured_data_embedding  Unsupported("vector")?
+  trip                       Trip                   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user                       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   contentReports             ContentReport[]
+  pins                       Pin[]
+  unusedTripsWithLastContent Trip[]                 @relation("LastContent")
 
   @@schema("app_data")
 }
@@ -132,11 +121,11 @@ model Pin {
 }
 
 model PlaceCache {
-  id                  String             @id @default(uuid())
-  placeId             String             @unique
+  id                  String            @id @default(uuid())
+  placeId             String            @unique
   lat                 Float
   lng                 Float
-  createdAt           DateTime           @default(now())
+  createdAt           DateTime          @default(now())
   lastCached          DateTime
   currentOpeningHours Json?
   name                String?
@@ -145,30 +134,27 @@ model PlaceCache {
   userRatingCount     Int?
   websiteUri          String?
   images              String[]
-  pins                Pin[]
   utcOffsetMinutes    Int?
-  userPlaceMustDos    UserPlaceMustDo[]  // Added relation to users who marked this place as must-do
+  pins                Pin[]
+  userPlaceMustDos    UserPlaceMustDo[]
 
   @@schema("app_data")
 }
 
 model ChatMessage {
-  id        String   @id
-  userId    String
-  text      String
-  createdAt DateTime @default(now())
-  type      String   @default("text")
-  fileUrl   String?
-  fileName  String?
-  tripId    String
-  
-  // Message moderation fields
-  isHidden  Boolean  @default(false)
-  hiddenAt  DateTime?
+  id         String    @id
+  userId     String
+  text       String
+  createdAt  DateTime  @default(now())
+  type       String    @default("text")
+  fileUrl    String?
+  fileName   String?
+  tripId     String
+  isHidden   Boolean   @default(false)
+  hiddenAt   DateTime?
   hideReason String?
-  
-  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trip       Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@schema("app_data")
 }
@@ -193,68 +179,76 @@ model UserPlaceMustDo {
   tripId       String
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   placeCache   PlaceCache @relation(fields: [placeCacheId], references: [id], onDelete: Cascade)
   trip         Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, placeCacheId, tripId])
   @@schema("app_data")
 }
 
-// Content reporting system
 model ContentReport {
   id          String              @id @default(uuid())
   contentId   String
   reportedBy  String
   reason      ContentReportReason
-  description String?             // Additional details about the report
+  description String?
   status      ReportStatus        @default(PENDING)
   createdAt   DateTime            @default(now())
   reviewedAt  DateTime?
-  reviewedBy  String?             // Admin who reviewed the report
-  
+  reviewedBy  String?
   content     Content             @relation(fields: [contentId], references: [id], onDelete: Cascade)
   reporter    User                @relation("ContentReporter", fields: [reportedBy], references: [id])
-  
-  @@unique([contentId, reportedBy]) // Prevent duplicate reports from same user
+
+  @@unique([contentId, reportedBy])
   @@schema("app_data")
 }
 
-// User reporting system
 model UserReport {
-  id          String           @id @default(uuid())
+  id             String           @id @default(uuid())
   reportedUserId String
-  reportedBy  String
-  reason      UserReportReason
-  description String?          // Additional details about the report
-  status      ReportStatus     @default(PENDING)
-  createdAt   DateTime         @default(now())
-  reviewedAt  DateTime?
-  reviewedBy  String?          // Admin who reviewed the report
-  
-  reportedUser User            @relation("ReportedUser", fields: [reportedUserId], references: [id])
-  reporter     User            @relation("UserReporter", fields: [reportedBy], references: [id])
-  
-  @@unique([reportedUserId, reportedBy]) // Prevent duplicate reports from same user
+  reportedBy     String
+  reason         UserReportReason
+  description    String?
+  status         ReportStatus     @default(PENDING)
+  createdAt      DateTime         @default(now())
+  reviewedAt     DateTime?
+  reviewedBy     String?
+  reportedUser   User             @relation("ReportedUser", fields: [reportedUserId], references: [id])
+  reporter       User             @relation("UserReporter", fields: [reportedBy], references: [id])
+
+  @@unique([reportedUserId, reportedBy])
   @@schema("app_data")
 }
 
-// User blocking system
 model UserBlock {
-  id          String   @id @default(uuid())
-  blockingUserId String  // User who is doing the blocking
-  blockedUserId  String  // User who is being blocked
-  createdAt   DateTime @default(now())
-  reason      String?  // Optional reason for blocking
-  
-  blockingUser User    @relation("BlockingUser", fields: [blockingUserId], references: [id], onDelete: Cascade)
-  blockedUser  User    @relation("BlockedUser", fields: [blockedUserId], references: [id], onDelete: Cascade)
-  
-  @@unique([blockingUserId, blockedUserId]) // Prevent duplicate blocks
+  id             String   @id @default(uuid())
+  blockingUserId String
+  blockedUserId  String
+  createdAt      DateTime @default(now())
+  reason         String?
+  blockedUser    User     @relation("BlockedUser", fields: [blockedUserId], references: [id], onDelete: Cascade)
+  blockingUser   User     @relation("BlockingUser", fields: [blockingUserId], references: [id], onDelete: Cascade)
+
+  @@unique([blockingUserId, blockedUserId])
   @@schema("app_data")
 }
 
-// Enums for reporting reasons
+model FcmToken {
+  id         String   @id @default(uuid())
+  userId     String
+  fcmToken   String   @unique
+  deviceInfo Json?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([fcmToken])
+  @@schema("app_data")
+}
+
 enum ContentReportReason {
   SPAM
   INAPPROPRIATE_CONTENT
@@ -265,7 +259,7 @@ enum ContentReportReason {
   HATE_SPEECH
   ADULT_CONTENT
   OTHER
-  
+
   @@schema("app_data")
 }
 
@@ -278,16 +272,16 @@ enum UserReportReason {
   THREATS
   SCAM
   OTHER
-  
+
   @@schema("app_data")
 }
 
 enum ReportStatus {
   PENDING
   REVIEWED
-  ACTIONED      // Content hidden or user blocked
-  DISMISSED     // Report was reviewed but no action taken
-  
+  ACTIONED
+  DISMISSED
+
   @@schema("app_data")
 }
 
@@ -295,24 +289,6 @@ enum ContentStatus {
   PROCESSING
   COMPLETED
   FAILED
-  
-  @@schema("app_data")
-}
 
-model FcmToken {
-  id          String   @id @default(uuid())
-  userId      String
-  fcmToken    String   @unique
-  deviceInfo  Json?    // Store device information like platform, version, etc.
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // Relations
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Indexes for performance
-  @@index([userId])
-  @@index([fcmToken])
   @@schema("app_data")
 }
