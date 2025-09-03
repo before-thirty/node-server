@@ -420,19 +420,20 @@ app.post(
       let description = content ?? "";
       let contentThumbnail = "";
 
-      // If content is empty, fetch metadata from the URL
+      // If content is empty, fetch content from the URL
       if (!content || content.trim() === "") {
         req.logger?.debug(
-          `The request doesnt contains content fetching metadata from URL`
+          `The request doesnt contains content, fetching content from URL`
         );
 
-        
-        const metadata = await getMetadata(url);
+        // For Instagram, Facebook, or TikTok - use metadata extraction
+        if (url.includes("instagram.com") || url.includes("facebook.com") || url.includes("tiktok.com")) {
+          req.logger?.debug(`Social media URL detected, using metadata extraction`);
+          
+          const metadata = await getMetadata(url);
 
           if (url.includes("facebook.com")){
-            req.logger?.debug(
-              `Facebook URL detected, using custom metadata extraction`
-            );
+            req.logger?.debug(`Facebook URL detected, using custom metadata extraction`);
             description = metadata?.og.title ?? "";
           }
           else {
@@ -440,7 +441,39 @@ app.post(
               .filter(Boolean)
               .join(" ");
           }
-        contentThumbnail = metadata?.og.image ?? "";
+          contentThumbnail = metadata?.og.image ?? "";
+        } 
+        // For all other URLs - use Jina API directly
+        else {
+          try {
+            req.logger?.debug(`Non-social media URL detected, fetching full webpage content via Jina API: ${url}`);
+            
+            const jinaResponse = await fetch(`https://r.jina.ai/${url}`, {
+              method: "GET",
+              headers: {
+                "Authorization": `Bearer ${process.env.JINA_API_TOKEN}`
+              }
+            });
+
+            if (jinaResponse.ok) {
+              const webpageContent = await jinaResponse.text();
+              if (webpageContent && webpageContent.trim().length > 0) {
+                // Use the full webpage content
+                description = webpageContent;
+                req.logger?.debug(`Successfully extracted webpage content (${webpageContent.length} characters)`);
+              } else {
+                req.logger?.warn(`Jina API returned empty content`);
+                description = "No content available from URL";
+              }
+            } else {
+              req.logger?.warn(`Jina API request failed with status: ${jinaResponse.status}`);
+              description = "Failed to fetch content from URL";
+            }
+          } catch (jinaError) {
+            req.logger?.warn(`Failed to fetch webpage content via Jina API:`, jinaError);
+            description = "Error fetching content from URL";
+          }
+        }
       }
 
       console.log("Desc is ", description);

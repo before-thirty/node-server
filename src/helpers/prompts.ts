@@ -27,17 +27,19 @@ export const captionPrompt = `
             ---
 
             ## **Output Format (JSON)**
-            [
-              {
-                "name": "<Place Name>",
-                "title": "<Title of the content>",
-                "location": "<Address, City, Country>",
-                "classification": "<One of: Food, Night life, Activities, Nature, Attraction ,Shopping ,Accommodation ,Not Pinned>",
-                "additional_info": "<Any other relevant details from the caption>",
-                "lat": <Latitude as a number or null>,
-                "long": <Longitude as a number or null>
-              }
-            ]
+            {
+              "locations": [
+                {
+                  "name": "<Place Name>",
+                  "title": "<Title of the content>",
+                  "location": "<Address, City, Country>",
+                  "classification": "<One of: Food, Night life, Activities, Nature, Attraction, Shopping, Accommodation, Not Pinned>",
+                  "additional_info": "<Any other relevant details from the caption>",
+                  "lat": <Latitude as a number or null>,
+                  "long": <Longitude as a number or null>
+                }
+              ]
+            }
 
             ---
 
@@ -49,17 +51,19 @@ export const captionPrompt = `
 
             ## **Example Output**
             
-            [
-              {
-                "name": "Sushi Dai",
-                "title": "Sushi Experience at Sushi Dai",
-                "location": "Tsukiji Market, Tokyo, Japan",
-                "classification": "Food",
-                "additional_info": "Famous sushi spot in Tsukiji Market, popular for fresh seafood.",
-                "lat": 35.6655,
-                "long": 139.7708
-              }
-            ]
+            {
+              "locations": [
+                {
+                  "name": "Sushi Dai",
+                  "title": "Sushi Experience at Sushi Dai",
+                  "location": "Tsukiji Market, Tokyo, Japan",
+                  "classification": "Food",
+                  "additional_info": "Famous sushi spot in Tsukiji Market, popular for fresh seafood.",
+                  "lat": 35.6655,
+                  "long": 139.7708
+                }
+              ]
+            }
             
             ---
 
@@ -70,17 +74,19 @@ export const captionPrompt = `
             ---
 
             ## **Example Output**
-            [
-              {
-                "name": "General Tokyo Travel Tips",
-                "title": "Tokyo Travel Tips for First Timers",
-                "location": "Tokyo, Japan",
-                "classification": "Not Pinned",
-                "additional_info": "This caption provides general travel tips for Tokyo and does not mention a specific place.",
-                "lat": null,
-                "long": null
-              }
-            ]
+            {
+              "locations": [
+                {
+                  "name": "General Tokyo Travel Tips",
+                  "title": "Tokyo Travel Tips for First Timers",
+                  "location": "Tokyo, Japan",
+                  "classification": "Not Pinned",
+                  "additional_info": "This caption provides general travel tips for Tokyo and does not mention a specific place.",
+                  "lat": null,
+                  "long": null
+                }
+              ]
+            }
             
             ---
 
@@ -95,17 +101,19 @@ export const captionPrompt = `
             *"The landscapes of France are breathtaking!"*
             
             ### Example Output
-            [
-              {
-                "name": "France Landscapes",
-                "title": "Landscapes of France",
-                "location": "France",
-                "classification": "Not Pinned",
-                "additional_info": "General mention of France's landscapes, no specific place mentioned.",
-                "lat": null,
-                "long": null
-              }
-            ]
+            {
+              "locations": [
+                {
+                  "name": "France Landscapes",
+                  "title": "Landscapes of France",
+                  "location": "France",
+                  "classification": "Not Pinned",
+                  "additional_info": "General mention of France's landscapes, no specific place mentioned.",
+                  "lat": null,
+                  "long": null
+                }
+              ]
+            }
             
             ---
             
@@ -114,17 +122,19 @@ export const captionPrompt = `
             *"Japan is on my bucket list for next year!"*
             
             ### Example Output
-            [
-              {
-                "name": "Japan Bucket List",
-                "title": "Japan Travel Dream",
-                "location": "Japan",
-                "classification": "Not Pinned",
-                "additional_info": "General mention of Japan, no specific city or place.",
-                "lat": null,
-                "long": null
-              }
-            ]
+            {
+              "locations": [
+                {
+                  "name": "Japan Bucket List",
+                  "title": "Japan Travel Dream",
+                  "location": "Japan",
+                  "classification": "Not Pinned",
+                  "additional_info": "General mention of Japan, no specific city or place.",
+                  "lat": null,
+                  "long": null
+                }
+              ]
+            }
             
             ---
             
@@ -133,17 +143,19 @@ export const captionPrompt = `
             *"The food in Italy is just incredible."*
             
             ### Example Output
-            [
-              {
-                "name": "Italy Food Experience",
-                "title": "Food in Italy",
-                "location": "Italy",
-                "classification": "Not Pinned",
-                "additional_info": "General mention of food in Italy, no specific restaurant or city.",
-                "lat": null,
-                "long": null
-              }
-            ]
+            {
+              "locations": [
+                {
+                  "name": "Italy Food Experience",
+                  "title": "Food in Italy",
+                  "location": "Italy",
+                  "classification": "Not Pinned",
+                  "additional_info": "General mention of food in Italy, no specific restaurant or city.",
+                  "lat": null,
+                  "long": null
+                }
+              ]
+            }
             
             ---
             
@@ -152,17 +164,19 @@ export const captionPrompt = `
             *"You have to visit the Shibuya district when you're in Tokyo."*
             
             ### Example Output
-            [
-              {
-                "name": "Shibuya District",
-                "title": "Visit Shibuya in Tokyo",
-                "location": "Shibuya, Tokyo, Japan",
-                "classification": "Attraction",
-                "additional_info": "Recommendation to visit Shibuya district in Tokyo.",
-                "lat": 35.6595,
-                "long": 139.7005
-              }
-            ]
+            {
+              "locations": [
+                {
+                  "name": "Shibuya District",
+                  "title": "Visit Shibuya in Tokyo",
+                  "location": "Shibuya, Tokyo, Japan",
+                  "classification": "Attraction",
+                  "additional_info": "Recommendation to visit Shibuya district in Tokyo.",
+                  "lat": 35.6595,
+                  "long": 139.7005
+                }
+              ]
+            }
             
             ---
             
@@ -171,17 +185,19 @@ export const captionPrompt = `
             *"Don't miss the street art in Bushwick, it's the coolest neighborhood in Brooklyn."*
             
             ### Example Output
-            [
-              {
-                "name": "Bushwick Street Art",
-                "title": "Street Art in Bushwick",
-                "location": "Bushwick, Brooklyn, New York, USA",
-                "classification": "Attraction",
-                "additional_info": "Bushwick is known for its vibrant street art scene.",
-                "lat": 40.7061,
-                "long": -73.9210
-              }
-            ]
+            {
+              "locations": [
+                {
+                  "name": "Bushwick Street Art",
+                  "title": "Street Art in Bushwick",
+                  "location": "Bushwick, Brooklyn, New York, USA",
+                  "classification": "Attraction",
+                  "additional_info": "Bushwick is known for its vibrant street art scene.",
+                  "lat": 40.7061,
+                  "long": -73.9210
+                }
+              ]
+            }
             
             ---
             
@@ -190,17 +206,19 @@ export const captionPrompt = `
             *"Best travel tip: Always try the local coffee shops in Lisbon."*
             
             ### Example Output
-            [
-              {
-                "name": "Lisbon Coffee Shops",
-                "title": "Travel Tip: Coffee Shops in Lisbon",
-                "location": "Lisbon, Portugal",
-                "classification": "Attraction",
-                "additional_info": "General travel tip with a specific city mentioned.",
-                "lat": 38.7223,
-                "long": -9.1393
-              }
-            ]
+            {
+              "locations": [
+                {
+                  "name": "Lisbon Coffee Shops",
+                  "title": "Travel Tip: Coffee Shops in Lisbon",
+                  "location": "Lisbon, Portugal",
+                  "classification": "Attraction",
+                  "additional_info": "General travel tip with a specific city mentioned.",
+                  "lat": 38.7223,
+                  "long": -9.1393
+                }
+              ]
+            }
             
             ---
             
@@ -209,17 +227,19 @@ export const captionPrompt = `
             *"Always pack light and bring a reusable water bottle."*
             
             ### Example Output
-            [
-              {
-                "name": "General Travel Tip",
-                "title": "Packing and Sustainability Advice",
-                "location": null,
-                "classification": "Not Pinned",
-                "additional_info": "General travel advice, no place mentioned.",
-                "lat": null,
-                "long": null
-              }
-            ]
+            {
+              "locations": [
+                {
+                  "name": "General Travel Tip",
+                  "title": "Packing and Sustainability Advice",
+                  "location": null,
+                  "classification": "Not Pinned",
+                  "additional_info": "General travel advice, no place mentioned.",
+                  "lat": null,
+                  "long": null
+                }
+              ]
+            }
             
             ---
 
@@ -244,7 +264,7 @@ You are categorizing places based on Google Places API data.
    - **Editorial summary**: Google's description of the place
    - **Business status**: Whether it's operational, closed, etc.
 
-3. **Return only the category name as a string, no JSON or additional text.**
+3. **Return the result as a JSON object with a 'category' field.**
 
 ## **Input Format**:
 The input will be provided in this exact format:
@@ -256,16 +276,10 @@ The input will be provided in this exact format:
 \`\`\`
 
 ## **Output Format**:
-Return exactly one of these category names as a plain string:
-- "Food"
-- "Night life"
-- "Activities"
-- "Nature"
-- "Attraction"
-- "Shopping"
-- "Accommodation"
-
-**Important**: Return only the category name, no quotes, no additional text, no explanations.
+Return a JSON object with exactly one of these category names:
+{
+  "category": "Food" | "Night life" | "Activities" | "Nature" | "Attraction" | "Shopping" | "Accommodation"
+}
 
 ## **Examples**:
 
@@ -274,77 +288,77 @@ Return exactly one of these category names as a plain string:
 - Types: ["coffee_shop", "restaurant", "food", "establishment"]
 - Editorial Summary: "Specialty coffee roaster and retailer"
 
-**Output**: Food
+**Output**: {"category": "Food"}
 
 **Input**:
 - Name: "Eiffel Tower"
 - Types: ["tourist_attraction", "point_of_interest", "establishment"]
 - Editorial Summary: "Iconic iron lattice tower"
 
-**Output**: Attraction
+**Output**: {"category": "Attraction"}
 
 **Input**:
 - Name: "Louvre Museum"
 - Types: ["museum", "art_gallery", "tourist_attraction"]
 - Editorial Summary: "World's largest art museum"
 
-**Output**: Attraction
+**Output**: {"category": "Attraction"}
 
 **Input**:
 - Name: "Central Park"
 - Types: ["park", "tourist_attraction", "point_of_interest"]
 - Editorial Summary: "Urban park with walking trails"
 
-**Output**: Nature
+**Output**: {"category": "Nature"}
 
 **Input**:
 - Name: "Rock Climbing Gym"
 - Types: ["gym", "sports_complex", "establishment"]
 - Editorial Summary: "Indoor rock climbing facility"
 
-**Output**: Activities
+**Output**: {"category": "Activities"}
 
 **Input**:
 - Name: "McDonald's"
 - Types: ["restaurant", "food", "establishment"]
 - Editorial Summary: "Fast food restaurant chain"
 
-**Output**: Food
+**Output**: {"category": "Food"}
 
 **Input**:
 - Name: "Broadway Theater"
 - Types: ["theater", "entertainment", "establishment"]
 - Editorial Summary: "Historic theater district"
 
-**Output**: Attraction
+**Output**: {"category": "Attraction"}
 
 **Input**:
 - Name: "Yosemite National Park"
 - Types: ["park", "tourist_attraction", "natural_feature"]
 - Editorial Summary: "National park with hiking trails"
 
-**Output**: Nature
+**Output**: {"category": "Nature"}
 
 **Input**:
 - Name: "Hilton Hotel"
 - Types: ["lodging", "hotel", "establishment"]
 - Editorial Summary: "Luxury hotel chain"
 
-**Output**: Accommodation
+**Output**: {"category": "Accommodation"}
 
 **Input**:
 - Name: "Nightclub XYZ"
 - Types: ["night_club", "bar", "establishment"]
 - Editorial Summary: "Popular nightclub with live music"
 
-**Output**: Night life
+**Output**: {"category": "Night life"}
 
 **Input**:
 - Name: "Shopping Mall"
 - Types: ["shopping_mall", "establishment"]
 - Editorial Summary: "Large shopping center with multiple stores"
 
-**Output**: Shopping
+**Output**: {"category": "Shopping"}
 
 **Now categorize this place based on the provided details:**
 `;
