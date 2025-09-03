@@ -230,6 +230,7 @@ export interface UserModel {
   email: string;
   phoneNumber: string;
   firebaseId: string;
+  lastOpened?: Date | null;
 }
 
 export const getUserByFirebaseId = async (
@@ -238,12 +239,28 @@ export const getUserByFirebaseId = async (
   return await prisma.user.findFirst({
     // TODO: change to findUnique once firebaseId is unique
     where: { firebaseId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phoneNumber: true,
+      firebaseId: true,
+      lastOpened: true,
+    },
   });
 };
 
-export const getUserById = async (userId: string) => {
+export const getUserById = async (userId: string): Promise<UserModel | null> => {
   return await prisma.user.findUnique({
     where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phoneNumber: true,
+      firebaseId: true,
+      lastOpened: true,
+    },
   });
 };
 
@@ -1394,4 +1411,81 @@ export const getUsersWithContentInTrip = async (
     displayName: user.tripUsers.length > 0 ? user.name : `${user.name} (Former Member)`,
     email:user.email
   }));
+};
+
+// Get content summary since user's last login
+export const getContentSummarySinceLastLogin = async (
+  currentUserId: string,
+  lastLoginDate: Date | null
+) => {
+  // If no lastLoginDate, return empty summary
+  if (!lastLoginDate) {
+    return [];
+  }
+
+  // Get blocked user IDs
+  const blockedUserIds = await getBlockedUserIds(currentUserId);
+
+  // Get all trips the user is part of
+  const userTrips = await prisma.tripUser.findMany({
+    where: { userId: currentUserId },
+    select: { tripId: true }
+  });
+
+  const tripIds = userTrips.map(trip => trip.tripId);
+
+  if (tripIds.length === 0) {
+    return [];
+  }
+
+  // Get content created after lastLoginDate in user's trips
+  const newContent = await prisma.content.findMany({
+    where: {
+      tripId: { in: tripIds },
+      createdAt: { gt: lastLoginDate },
+      status: 'COMPLETED', // Only completed content
+      userId: {
+        notIn: [...blockedUserIds] // Exclude blocked users and current user's own content
+      },
+      isHidden: false,
+      user: {
+        isBlocked: false
+      }
+    },
+    select: {
+      id: true,
+      tripId: true,
+      pins_count: true,
+      createdAt: true,
+      trip: {
+        select: {
+          id: true,
+          name: true
+        }
+      }
+    }
+  });
+
+  // Group by trip and sum pins
+  const tripSummary = new Map<string, { tripId: string; tripName: string; totalPins: number }>();
+
+  newContent.forEach(content => {
+    const tripId = content.tripId;
+    const tripName = content.trip.name;
+    const pinsCount = content.pins_count || 0;
+
+    if (tripSummary.has(tripId)) {
+      const existing = tripSummary.get(tripId)!;
+      existing.totalPins += pinsCount;
+    } else {
+      tripSummary.set(tripId, {
+        tripId,
+        tripName,
+        totalPins: pinsCount
+      });
+    }
+  });
+
+  // Convert to array and filter out trips with 0 pins
+  return Array.from(tripSummary.values()).filter(summary => summary.totalPins > 0);
 };

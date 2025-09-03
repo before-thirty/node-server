@@ -21,6 +21,7 @@ model User {
   blockedAt           DateTime?
   blockReason         String?
   bucketListCountries String[]          @default([])
+  lastOpened          DateTime?
   metadata            Json?
   Message             ChatMessage[]
   contents            Content[]

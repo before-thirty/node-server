@@ -60,7 +60,8 @@ import {
   getPublicTrips,
   getUserRoleInTrip,
   getUsersWithContentInTrip,
-  appendPinCount
+  appendPinCount,
+  getContentSummarySinceLastLogin
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "./middleware/currentUser";
@@ -1010,9 +1011,15 @@ app.get(
       // Validate query parameters
       const { userLastLogin } = tripContentQuerySchema.parse(req.query);
 
-      const lastLoginDate = userLastLogin
-        ? new Date(userLastLogin * 1000)
-        : null;
+      // Determine the last login time to use for filtering new content
+      let lastLoginDate: Date | null = null;
+      if (userLastLogin) {
+        // Use the provided userLastLogin parameter
+        lastLoginDate = new Date(userLastLogin * 1000);
+      } else if (currentUser.lastOpened) {
+        // Use the user's last opened time from the database
+        lastLoginDate = new Date(currentUser.lastOpened);
+      }
 
       // Verify user has access to this trip
       const userInTrip = await isUserInTrip(currentUser.id, tripId);
@@ -3013,6 +3020,86 @@ app.put(
   }
 );
 
+// API to update user's last opened time
+app.post(
+  "/api/update-last-opened",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      // Update the user's last opened time
+      const updatedUser = await prisma.user.update({
+        where: { id: currentUser.id },
+        data: { lastOpened: new Date() },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          lastOpened: true,
+          updatedAt: true,
+        },
+      });
+
+      req.logger?.info(
+        `Last opened time updated for user ${currentUser.id}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Last opened time updated successfully",
+        user: updatedUser,
+      });
+    } catch (error) {
+      console.error("Error updating last opened time:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// API to get content summary since user's last login
+app.get(
+  "/api/content-summary-since-last-login",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      // Use the user's last opened time from the database
+      const lastLoginDate = currentUser.lastOpened || null;
+
+      req.logger?.info(
+        `Content summary request for user ${currentUser.id}, lastOpened: ${lastLoginDate}`
+      );
+
+      // Get content summary since last login
+      const contentSummary = await getContentSummarySinceLastLogin(
+        currentUser.id,
+        lastLoginDate
+      );
+
+      res.status(200).json({
+        success: true,
+        lastLoginDate: lastLoginDate,
+        summary: contentSummary,
+        hasNewContent: contentSummary.length > 0,
+      });
+    } catch (error) {
+      console.error("Error fetching content summary:", error);
+      req.logger?.error(`Failed to fetch content summary: ${error}`);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
 // Debug endpoint to check FCM tokens for a user
 app.get(
   "/api/debug/fcm-tokens/:userId",
@@ -3025,7 +3112,7 @@ app.get(
       
       const tokens = await prisma.fcmToken.findMany({
         where: { userId },
-        select: { 
+        select: {
           id: true,
           fcmToken: true,
           isActive: true,
