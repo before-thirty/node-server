@@ -3081,16 +3081,23 @@ app.get(
       );
 
       // Get content summary since last login
-      const contentSummary = await getContentSummarySinceLastLogin(
+      const contentSummaryResult = await getContentSummarySinceLastLogin(
         currentUser.id,
         lastLoginDate
+      );
+      
+      const { completedSummary, processingItems } = contentSummaryResult;
+
+      req.logger?.info(
+        `Content summary result: ${completedSummary.length} completed trip summaries, ${processingItems.length} processing items found`
       );
 
       res.status(200).json({
         success: true,
         lastLoginDate: lastLoginDate,
-        summary: contentSummary,
-        hasNewContent: contentSummary.length > 0,
+        summary: completedSummary,
+        processingItems: processingItems,
+        hasNewContent: completedSummary.length > 0 || processingItems.length > 0,
       });
     } catch (error) {
       console.error("Error fetching content summary:", error);
