@@ -224,7 +224,8 @@ export const sendPinAddedNotifications = async (
   pinsCount: number,
   tripName: string,
   authorName: string,
-  contentTitle?: string
+  contentTitle?: string,
+  contentId?: string
 ): Promise<void> => {
   try {
     // Send notification to the content author (trip owner/user themselves)
@@ -239,6 +240,7 @@ export const sendPinAddedNotifications = async (
       data: {
         type: 'pins_added_to_own_trip',
         tripId,
+        contentId: contentId || '',
         pinsCount: pinsCount.toString(),
         tripName,
         contentTitle: contentTitle || ''
@@ -274,6 +276,7 @@ export const sendPinAddedNotifications = async (
         data: {
           type: 'pins_added_by_member',
           tripId,
+          contentId: contentId || '',
           pinsCount: pinsCount.toString(),
           authorId: contentAuthorId,
           authorName,

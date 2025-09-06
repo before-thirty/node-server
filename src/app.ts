@@ -261,7 +261,8 @@ const processContentAnalysisAsync = async (
           pinsCount,
           contentWithDetails.trip.name,
           contentWithDetails.user.name,
-          title || contentWithDetails.title || undefined
+          title || contentWithDetails.title || undefined,
+          contentWithDetails.id
         );
       } catch (notificationError) {
         console.error('Error sending pin added notifications:', notificationError);
@@ -2493,7 +2494,8 @@ app.post(
             actualPinsCount,
             existingContent.trip.name,
             existingContent.user.name,
-            title || existingContent.title || undefined
+            title || existingContent.title || undefined,
+            existingContent.id
           );
         } catch (notificationError) {
           console.error('Error sending pin added notifications:', notificationError);
