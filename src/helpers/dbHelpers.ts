@@ -45,6 +45,20 @@ export const updateContent = async (
   });
 };
 
+// Update content status
+export const updateContentStatus = async (
+  contentId: string,
+  status: 'PROCESSING' | 'COMPLETED' | 'FAILED'
+) => {
+  return await prisma.content.update({
+    where: { id: contentId },
+    data: {
+      status: status,
+      updatedAt: new Date()
+    },
+  });
+};
+
 // Append new content data to existing Content entry (for update-content API)
 export const appendToContent = async (
   contentId: string,

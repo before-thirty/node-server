@@ -30,6 +30,7 @@ import {
   createContent,
   createUserTrip,
   updateContent,
+  updateContentStatus,
   appendToContent,
   getPlaceCacheById,
   createPin,
@@ -2266,6 +2267,13 @@ const UpdateContentSchema = z.object({
   content: z.string().min(1, "Content/transcript is required"),
 });
 
+const UpdateContentStatusSchema = z.object({
+  contentId: z.string().uuid("Invalid content ID format"),
+  status: z.enum(['PROCESSING', 'COMPLETED', 'FAILED'], {
+    errorMap: () => ({ message: "Status must be one of: PROCESSING, COMPLETED, FAILED" })
+  })
+});
+
 // Add this endpoint to your main Express app file
 app.post(
   "/api/update-content",
@@ -2551,6 +2559,85 @@ app.post(
       } else {
         console.error(`Error processing update content request:`, error);
         res.status(500).json({ error: "Internal server error." });
+      }
+    }
+  }
+);
+
+// API to update content status
+app.patch(
+  "/api/update-content-status",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const validatedData = UpdateContentStatusSchema.parse(req.body);
+      const { contentId, status } = validatedData;
+
+      console.log(
+        `Received request to update content status: contentId=${contentId}, status=${status}`
+      );
+      req.logger?.info(
+        `Update content status request: contentId=${contentId}, status=${status}`
+      );
+
+      const existingContent = await prisma.content.findUnique({
+        where: { id: contentId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true
+            }
+          },
+          trip: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
+      });
+
+      if (!existingContent) {
+        res.status(404).json({ error: "Content not found" });
+        return;
+      }
+
+      // Update the content status
+      const updatedContent = await updateContentStatus(contentId, status);
+
+      console.log(`✅ Content status updated successfully: ${contentId} -> ${status}`);
+      req.logger?.info(`Content status updated: ${contentId} -> ${status}`);
+
+      // Optionally emit WebSocket event for status change
+      if (status === 'COMPLETED') {
+        emitContentProcessingStatus(existingContent.tripId, contentId, 'completed', {
+          pinsCount: existingContent.pins_count,
+          title: existingContent.title
+        });
+      } else if (status === 'FAILED') {
+        emitContentProcessingStatus(existingContent.tripId, contentId, 'failed', {
+          pinsCount: 0,
+          title: existingContent.title
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Content status updated successfully",
+        contentId: contentId,
+        newStatus: status,
+        updatedAt: updatedContent.updatedAt
+      });
+
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json({ error: "Invalid input data", details: error.errors });
+      } else {
+        console.error(`Error updating content status:`, error);
+        req.logger?.error(`Error updating content status:`, error);
+        res.status(500).json({ error: "Internal server error" });
       }
     }
   }
