@@ -71,28 +71,38 @@ export const appendToContent = async (
   // Parse existing structured data
   let existingStructuredArray = [];
   try {
-    existingStructuredArray = JSON.parse(existingContent.structuredData || "[]");
+    existingStructuredArray = JSON.parse(
+      existingContent.structuredData || "[]"
+    );
   } catch (error) {
-    console.log("Failed to parse existing structured data, treating as empty array");
+    console.log(
+      "Failed to parse existing structured data, treating as empty array"
+    );
     existingStructuredArray = [];
   }
 
   // Ensure both old and new structured data are arrays
-  const newStructuredArray = Array.isArray(newStructuredData) 
-    ? newStructuredData 
-    : (newStructuredData ? [newStructuredData] : []);
+  const newStructuredArray = Array.isArray(newStructuredData)
+    ? newStructuredData
+    : newStructuredData
+    ? [newStructuredData]
+    : [];
 
   // Combine the structured data arrays
-  const combinedStructuredData = [...existingStructuredArray, ...newStructuredArray];
+  const combinedStructuredData = [
+    ...existingStructuredArray,
+    ...newStructuredArray,
+  ];
 
   // Append raw content with a separator
-  const combinedRawData = existingContent.rawData + "\n\n--- APPENDED CONTENT ---\n\n" + newContent;
+  const combinedRawData =
+    existingContent.rawData + "\n\n--- APPENDED CONTENT ---\n\n" + newContent;
 
   // Use the new title if provided, otherwise keep existing
   const finalTitle = newTitle;
 
   // Calculate new pins count from combined structured data
-  const newPinsCount = actualPinsCount + existingContent.pins_count
+  const newPinsCount = actualPinsCount + existingContent.pins_count;
 
   return await prisma.content.update({
     where: { id: contentId },
@@ -101,22 +111,19 @@ export const appendToContent = async (
       structuredData: JSON.stringify(combinedStructuredData),
       title: finalTitle,
       pins_count: newPinsCount,
-      status: "COMPLETED"
+      status: "COMPLETED",
     },
   });
 };
 
-export const appendPinCount = async (
-  contentId: string,
-  pinCount: number
-) => {
+export const appendPinCount = async (contentId: string, pinCount: number) => {
   return await prisma.content.update({
     where: { id: contentId },
     data: {
-      pins_count: pinCount
+      pins_count: pinCount,
     },
   });
-}
+};
 
 // Function to get the PlaceCache by placeId
 export const getPlaceCacheById = async (placeId: string) => {
@@ -192,6 +199,7 @@ export const getTripsByUserId = async (userId: string) => {
             startDate: true,
             endDate: true,
             description: true,
+            metadata: true,
           },
         },
       },
@@ -252,7 +260,8 @@ export const createTripAndTripUser = async (
   name: string,
   startDate: Date,
   endDate: Date,
-  description: string
+  description: string,
+  metadata?: any
 ) => {
   return await prisma.$transaction(async (tx) => {
     const trip = await tx.trip.create({
@@ -261,6 +270,7 @@ export const createTripAndTripUser = async (
         startDate,
         endDate,
         description,
+        metadata,
       },
     });
 
@@ -329,7 +339,6 @@ export const getTripById = async (tripId: string) => {
   });
 };
 
-
 export const addUserToTrip = async (
   tripId: string,
   userId: string,
@@ -367,7 +376,6 @@ export const addUserToTrip = async (
   }
 };
 
-
 export const addMessage = async (
   tripId: string,
   userId: string,
@@ -396,8 +404,6 @@ export const getMessageById = async (tripId: string, messageId: string) => {
   return response;
 };
 
-
-
 export const getUsername = async (userId: any) => {
   const user = await prisma.user.findUnique({
     where: { id: userId as string },
@@ -405,8 +411,6 @@ export const getUsername = async (userId: any) => {
   });
   return user;
 };
-
-
 
 // === Share Token Helper Functions ===
 
@@ -644,11 +648,14 @@ export const deletePin = async (pinId: string): Promise<void> => {
 };
 
 // Helper function to find existing content by URL (excluding current content ID)
-export const findExistingContentByUrl = async (url: string, excludeContentId: string) => {
+export const findExistingContentByUrl = async (
+  url: string,
+  excludeContentId: string
+) => {
   return await prisma.content.findFirst({
-    where: { 
+    where: {
       url: url,
-      id: { not: excludeContentId }
+      id: { not: excludeContentId },
     },
     select: {
       id: true,
@@ -761,30 +768,35 @@ export const verifyPinAccess = async (
 // =============================================================================
 
 // Get list of user IDs that the current user has blocked
-export const getBlockedUserIds = async (currentUserId: string): Promise<string[]> => {
+export const getBlockedUserIds = async (
+  currentUserId: string
+): Promise<string[]> => {
   const blockedUsers = await prisma.userBlock.findMany({
     where: {
-      blockingUserId: currentUserId
+      blockingUserId: currentUserId,
     },
     select: {
-      blockedUserId: true
-    }
+      blockedUserId: true,
+    },
   });
-  
-  return blockedUsers.map(block => block.blockedUserId);
+
+  return blockedUsers.map((block) => block.blockedUserId);
 };
 
 // Check if a user is blocked by the current user
-export const isUserBlocked = async (currentUserId: string, targetUserId: string): Promise<boolean> => {
+export const isUserBlocked = async (
+  currentUserId: string,
+  targetUserId: string
+): Promise<boolean> => {
   const block = await prisma.userBlock.findUnique({
     where: {
       blockingUserId_blockedUserId: {
         blockingUserId: currentUserId,
-        blockedUserId: targetUserId
-      }
-    }
+        blockedUserId: targetUserId,
+      },
+    },
   });
-  
+
   return !!block;
 };
 
@@ -806,11 +818,11 @@ export const getTripContentData = async (
   const contentWhereConditions: any = {
     tripId,
     userId: {
-      notIn: blockedUserIds
+      notIn: blockedUserIds,
     },
     user: {
-      isBlocked: false
-    }
+      isBlocked: false,
+    },
   };
 
   // Add content moderation filters
@@ -826,32 +838,32 @@ export const getTripContentData = async (
         select: {
           id: true,
           name: true,
-          isBlocked: true
-        }
+          isBlocked: true,
+        },
       },
       contentReports: {
         select: {
           id: true,
           status: true,
           reason: true,
-          createdAt: true
-        }
-      }
-    }
+          createdAt: true,
+        },
+      },
+    },
   });
 
   // Filter based on report status if needed
-  const filteredContentList = contentList.filter(content => {
+  const filteredContentList = contentList.filter((content) => {
     if (showReportedContent) {
       return true; // Admins can see all content
     }
 
     // Regular users can't see content with pending or actioned reports
     const hasPendingReports = content.contentReports.some(
-      report => report.status === 'PENDING'
+      (report) => report.status === "PENDING"
     );
     const hasActionedReports = content.contentReports.some(
-      report => report.status === 'ACTIONED'
+      (report) => report.status === "ACTIONED"
     );
 
     return !hasPendingReports && !hasActionedReports;
@@ -909,7 +921,7 @@ export const getTripContentData = async (
       userPlaceMustDos: {
         where: {
           tripId: tripId,
-          userId: currentUserId // Only check must-do status for current user
+          userId: currentUserId, // Only check must-do status for current user
         },
         select: {
           id: true,
@@ -945,7 +957,10 @@ export const getTripContentData = async (
 };
 
 // Updated getContentPinsPlaceNested to filter blocked users
-export const getContentPinsPlaceNested = async (tripId: string, currentUserId: string) => {
+export const getContentPinsPlaceNested = async (
+  tripId: string,
+  currentUserId: string
+) => {
   // Get blocked user IDs
   const blockedUserIds = await getBlockedUserIds(currentUserId);
 
@@ -955,20 +970,20 @@ export const getContentPinsPlaceNested = async (tripId: string, currentUserId: s
       contents: {
         where: {
           userId: {
-            notIn: blockedUserIds
+            notIn: blockedUserIds,
           },
           isHidden: false,
           user: {
-            isBlocked: false
-          }
+            isBlocked: false,
+          },
         },
         include: {
           user: {
             select: {
               id: true,
               name: true,
-              isBlocked: true
-            }
+              isBlocked: true,
+            },
           },
           pins: {
             include: {
@@ -983,7 +998,10 @@ export const getContentPinsPlaceNested = async (tripId: string, currentUserId: s
 };
 
 // Updated getUsersFromTrip to filter blocked users
-export const getUsersFromTrip = async (tripId: string, currentUserId?: string) => {
+export const getUsersFromTrip = async (
+  tripId: string,
+  currentUserId?: string
+) => {
   const users = await prisma.trip.findUnique({
     where: { id: tripId },
     include: {
@@ -994,8 +1012,8 @@ export const getUsersFromTrip = async (tripId: string, currentUserId?: string) =
               id: true,
               name: true,
               email: true,
-              isBlocked: true
-            }
+              isBlocked: true,
+            },
           },
         },
       },
@@ -1009,15 +1027,73 @@ export const getUsersFromTrip = async (tripId: string, currentUserId?: string) =
   let filteredUsers = users.tripUsers.map((tripUser) => tripUser.user);
 
   // Filter out globally blocked users
-  filteredUsers = filteredUsers.filter(user => user && !user.isBlocked);
+  filteredUsers = filteredUsers.filter((user) => user && !user.isBlocked);
 
   // If currentUserId is provided, also filter out users blocked by current user
   if (currentUserId) {
     const blockedUserIds = await getBlockedUserIds(currentUserId);
-    filteredUsers = filteredUsers.filter(user => user && !blockedUserIds.includes(user.id));
+    filteredUsers = filteredUsers.filter(
+      (user) => user && !blockedUserIds.includes(user.id)
+    );
   }
 
-  return filteredUsers.map(user => user?.name).filter(Boolean);
+  return filteredUsers.map((user) => user?.name).filter(Boolean);
+};
+
+// Get all trip users with full details (not just names)
+export const getAllTripUsers = async (
+  tripId: string,
+  currentUserId?: string
+) => {
+  const users = await prisma.trip.findUnique({
+    where: { id: tripId },
+    include: {
+      tripUsers: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              isBlocked: true,
+              metadata: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!users) {
+    return [];
+  }
+
+  let filteredUsers = users.tripUsers.map((tripUser) => ({
+    ...tripUser.user,
+    role: tripUser.role,
+    joinedAt: tripUser.createdAt,
+  }));
+
+  // Filter out globally blocked users
+  filteredUsers = filteredUsers.filter((user) => user && !user.isBlocked);
+
+  // If currentUserId is provided, also filter out users blocked by current user
+  if (currentUserId) {
+    const blockedUserIds = await getBlockedUserIds(currentUserId);
+    filteredUsers = filteredUsers.filter(
+      (user) => user && !blockedUserIds.includes(user.id)
+    );
+  }
+
+  return filteredUsers.map((user) => ({
+    id: user.id,
+    name: user.name,
+    displayName: user.name,
+    membershipStatus: "current" as const,
+    role: user.role,
+    email: user.email,
+    metadata: user.metadata,
+  }));
 };
 
 // Updated getMessagesByTime to filter blocked users
@@ -1035,12 +1111,12 @@ export const getMessagesByTime = async (
       tripId: tripId as string,
       ...(beforeDate && { createdAt: { lt: beforeDate } }),
       userId: {
-        notIn: blockedUserIds
+        notIn: blockedUserIds,
       },
       isHidden: false, // Exclude hidden messages
       user: {
-        isBlocked: false // Exclude messages from globally blocked users
-      }
+        isBlocked: false, // Exclude messages from globally blocked users
+      },
     },
     orderBy: { createdAt: "desc" },
     take: queryLimit,
@@ -1049,7 +1125,7 @@ export const getMessagesByTime = async (
         select: {
           id: true,
           name: true,
-          isBlocked: true
+          isBlocked: true,
         },
       },
     },
@@ -1058,21 +1134,24 @@ export const getMessagesByTime = async (
 };
 
 // Updated getUsersByIds to filter blocked and globally blocked users
-export const getUsersByIds = async (userIds: string[], currentUserId?: string) => {
+export const getUsersByIds = async (
+  userIds: string[],
+  currentUserId?: string
+) => {
   if (!userIds || userIds.length === 0) return [];
-  
+
   let filteredUserIds = userIds;
-  
+
   // If currentUserId is provided, filter out blocked users
   if (currentUserId) {
     const blockedUserIds = await getBlockedUserIds(currentUserId);
-    filteredUserIds = userIds.filter(id => !blockedUserIds.includes(id));
+    filteredUserIds = userIds.filter((id) => !blockedUserIds.includes(id));
   }
-  
+
   return await prisma.user.findMany({
-    where: { 
+    where: {
       id: { in: filteredUserIds },
-      isBlocked: false // Exclude globally blocked users
+      isBlocked: false, // Exclude globally blocked users
     },
     select: {
       id: true,
@@ -1081,8 +1160,8 @@ export const getUsersByIds = async (userIds: string[], currentUserId?: string) =
       phoneNumber: true,
       createdAt: true,
       updatedAt: true,
-      firebaseId: true
-    }
+      firebaseId: true,
+    },
   });
 };
 
@@ -1092,7 +1171,7 @@ export const getUsersByIds = async (userIds: string[], currentUserId?: string) =
 
 // Helper function to hide content (for admin actions)
 export const hideContent = async (
-  contentId: string, 
+  contentId: string,
   reason: string,
   adminUserId: string
 ): Promise<any> => {
@@ -1102,21 +1181,21 @@ export const hideContent = async (
       data: {
         isHidden: true,
         hiddenAt: new Date(),
-        hideReason: reason
-      }
+        hideReason: reason,
+      },
     });
 
     // Also update any related content reports
     await prisma.contentReport.updateMany({
-      where: { 
+      where: {
         contentId: contentId,
-        status: 'PENDING'
+        status: "PENDING",
       },
       data: {
-        status: 'ACTIONED',
+        status: "ACTIONED",
         reviewedAt: new Date(),
-        reviewedBy: adminUserId
-      }
+        reviewedBy: adminUserId,
+      },
     });
 
     return updatedContent;
@@ -1128,7 +1207,7 @@ export const hideContent = async (
 
 // Helper function to block user globally (for admin actions)
 export const blockUserGlobally = async (
-  userId: string, 
+  userId: string,
   reason: string,
   adminUserId: string
 ): Promise<any> => {
@@ -1138,21 +1217,21 @@ export const blockUserGlobally = async (
       data: {
         isBlocked: true,
         blockedAt: new Date(),
-        blockReason: reason
-      }
+        blockReason: reason,
+      },
     });
 
     // Also update any related user reports
     await prisma.userReport.updateMany({
-      where: { 
+      where: {
         reportedUserId: userId,
-        status: 'PENDING'
+        status: "PENDING",
       },
       data: {
-        status: 'ACTIONED',
+        status: "ACTIONED",
         reviewedAt: new Date(),
-        reviewedBy: adminUserId
-      }
+        reviewedBy: adminUserId,
+      },
     });
 
     return updatedUser;
@@ -1170,8 +1249,8 @@ export const unblockUserGlobally = async (userId: string): Promise<any> => {
       data: {
         isBlocked: false,
         blockedAt: null,
-        blockReason: null
-      }
+        blockReason: null,
+      },
     });
 
     return updatedUser;
@@ -1189,8 +1268,8 @@ export const unhideContent = async (contentId: string): Promise<any> => {
       data: {
         isHidden: false,
         hiddenAt: null,
-        hideReason: null
-      }
+        hideReason: null,
+      },
     });
 
     return updatedContent;
@@ -1202,7 +1281,7 @@ export const unhideContent = async (contentId: string): Promise<any> => {
 
 // Helper function to get content reports for admin dashboard
 export const getContentReports = async (
-  status: 'PENDING' | 'REVIEWED' | 'ACTIONED' | 'DISMISSED' = 'PENDING',
+  status: "PENDING" | "REVIEWED" | "ACTIONED" | "DISMISSED" = "PENDING",
   limit: number = 50,
   offset: number = 0
 ) => {
@@ -1222,26 +1301,26 @@ export const getContentReports = async (
               select: {
                 id: true,
                 name: true,
-                email: true
-              }
-            }
-          }
+                email: true,
+              },
+            },
+          },
         },
         reporter: {
           select: {
             id: true,
             name: true,
-            email: true
-          }
-        }
+            email: true,
+          },
+        },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: limit,
-      skip: offset
+      skip: offset,
     });
 
     const totalCount = await prisma.contentReport.count({
-      where: { status }
+      where: { status },
     });
 
     return { reports, totalCount };
@@ -1253,7 +1332,7 @@ export const getContentReports = async (
 
 // Helper function to get user reports for admin dashboard
 export const getUserReports = async (
-  status: 'PENDING' | 'REVIEWED' | 'ACTIONED' | 'DISMISSED' = 'PENDING',
+  status: "PENDING" | "REVIEWED" | "ACTIONED" | "DISMISSED" = "PENDING",
   limit: number = 50,
   offset: number = 0
 ) => {
@@ -1267,24 +1346,24 @@ export const getUserReports = async (
             name: true,
             email: true,
             isBlocked: true,
-            createdAt: true
-          }
+            createdAt: true,
+          },
         },
         reporter: {
           select: {
             id: true,
             name: true,
-            email: true
-          }
-        }
+            email: true,
+          },
+        },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: limit,
-      skip: offset
+      skip: offset,
     });
 
     const totalCount = await prisma.userReport.count({
-      where: { status }
+      where: { status },
     });
 
     return { reports, totalCount };
@@ -1302,19 +1381,19 @@ export const getModerationStats = async () => {
       pendingUserReports,
       totalHiddenContent,
       totalBlockedUsers,
-      reportsLast24h
+      reportsLast24h,
     ] = await Promise.all([
-      prisma.contentReport.count({ where: { status: 'PENDING' } }),
-      prisma.userReport.count({ where: { status: 'PENDING' } }),
+      prisma.contentReport.count({ where: { status: "PENDING" } }),
+      prisma.userReport.count({ where: { status: "PENDING" } }),
       prisma.content.count({ where: { isHidden: true } }),
       prisma.user.count({ where: { isBlocked: true } }),
       prisma.contentReport.count({
         where: {
           createdAt: {
-            gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
-          }
-        }
-      })
+            gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
+          },
+        },
+      }),
     ]);
 
     return {
@@ -1322,7 +1401,7 @@ export const getModerationStats = async () => {
       pendingUserReports,
       totalHiddenContent,
       totalBlockedUsers,
-      reportsLast24h
+      reportsLast24h,
     };
   } catch (error) {
     console.error("Error fetching moderation stats:", error);
@@ -1346,52 +1425,55 @@ export const getUserRoleInTrip = async (
       role: true,
     },
   });
-  
+
   return tripUser?.role || null;
 };
 
 // Get users who have contributed content to a trip (includes current members and ex-members)
 export const getUsersWithContentInTrip = async (
-  tripId: string, 
+  tripId: string,
   currentUserId: string
 ) => {
   // Get blocked user IDs
   const blockedUserIds = await getBlockedUserIds(currentUserId);
-  
+
   // Get all users who have content in this trip
   const contentUsers = await prisma.user.findMany({
     where: {
       contents: {
         some: {
           tripId: tripId,
-        }
+        },
       },
       id: {
-        notIn: blockedUserIds
+        notIn: blockedUserIds,
       },
-      isBlocked: false
+      isBlocked: false,
     },
     select: {
       id: true,
       name: true,
       email: true,
+      metadata: true,
       tripUsers: {
         where: { tripId },
         select: {
           role: true,
-          createdAt: true
-        }
-      }
-    }
-  });
+          createdAt: true,
+        },
+      },
+    },
+  } as any);
 
   // Map users with their membership status
-  return contentUsers.map(user => ({
+  return contentUsers.map((user: any) => ({
     id: user.id,
     name: user.name,
-    membershipStatus: user.tripUsers.length > 0 ? 'current' : 'former',
+    membershipStatus: user.tripUsers.length > 0 ? "current" : "former",
     role: user.tripUsers.length > 0 ? user.tripUsers[0].role : null,
-    displayName: user.tripUsers.length > 0 ? user.name : `${user.name} (Former Member)`,
-    email:user.email
+    displayName:
+      user.tripUsers.length > 0 ? user.name : `${user.name} (Former Member)`,
+    email: user.email,
+    metadata: user.metadata,
   }));
 };
