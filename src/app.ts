@@ -304,6 +304,12 @@ const processContentAnalysisAsync = async (
           // Don't fail the request if notifications fail
         }
       }
+
+      // Emit completion status via WebSocket for content that doesn't need external API
+      emitContentProcessingStatus(tripId, contentId, "completed", {
+        pinsCount: pinsCount,
+        title: title,
+      });
     }
 
     req.logger?.debug(
