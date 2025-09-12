@@ -30,6 +30,7 @@ import {
   createContent,
   createUserTrip,
   updateContent,
+  updateContentStatus,
   appendToContent,
   getPlaceCacheById,
   createPin,
@@ -62,6 +63,7 @@ import {
   getUsersWithContentInTrip,
   getAllTripUsers,
   appendPinCount,
+  getContentSummarySinceLastLogin,
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "./middleware/currentUser";
@@ -76,6 +78,7 @@ import {
   sendNotificationToUsers,
   sendBroadcastNotification,
   getUserNotificationStats,
+  sendPinAddedNotifications,
 } from "./services/notificationService";
 import { emitContentProcessingStatus } from "./services/websocketService";
 
@@ -224,7 +227,12 @@ const processContentAnalysisAsync = async (
 
     // Check if URL already exists in content table (excluding current content)
     console.log("URL is ", url);
-    // URL doesn't exist, fire external API calls without waiting for response
+
+    // Determine if external API calls are needed
+    const needsExternalAPI =
+      url.includes("instagram.com") || url.includes("tiktok.com");
+
+    // Fire external API calls without waiting for response if needed
     if (url.includes("instagram.com")) {
       console.log("Instagram URL detected, calling analysis API");
       fetch("https://kadshnkjadnk.pinspire.co.in/api/analyze", {
@@ -253,9 +261,56 @@ const processContentAnalysisAsync = async (
 
     await updateContent(contentId, analysis, title, pinsCount);
 
+    // If no external API calls are needed, set status to COMPLETED and send notifications
+    if (!needsExternalAPI) {
+      await updateContentStatus(contentId, "COMPLETED");
+
+      // Get content details for notification
+      const contentWithDetails = await prisma.content.findUnique({
+        where: { id: contentId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          trip: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      // Send notifications to trip members about pins added (if any pins were added)
+      if (pinsCount > 0 && contentWithDetails) {
+        try {
+          await sendPinAddedNotifications(
+            contentWithDetails.trip.id,
+            contentWithDetails.user.id,
+            pinsCount,
+            contentWithDetails.trip.name,
+            contentWithDetails.user.name,
+            title || contentWithDetails.title || undefined,
+            contentWithDetails.id
+          );
+        } catch (notificationError) {
+          console.error(
+            "Error sending pin added notifications:",
+            notificationError
+          );
+          // Don't fail the request if notifications fail
+        }
+      }
+    }
+
     req.logger?.debug(
       `Updated content entry with structured data ${contentId}`
     );
+
+    // Note: Notifications are sent either above (if no external API) or later in /api/update-content
 
     // Generate embeddings for the new content in the background
     try {
@@ -454,25 +509,76 @@ app.post(
       let description = content ?? "";
       let contentThumbnail = "";
 
-      // If content is empty, fetch metadata from the URL
+      // If content is empty, fetch content from the URL
       if (!content || content.trim() === "") {
         req.logger?.debug(
-          `The request doesnt contains content fetching metadata from URL`
+          `The request doesnt contains content, fetching content from URL`
         );
 
-        const metadata = await getMetadata(url);
-
-        if (url.includes("facebook.com")) {
+        // For Instagram, Facebook, or TikTok - use metadata extraction
+        if (
+          url.includes("instagram.com") ||
+          url.includes("facebook.com") ||
+          url.includes("tiktok.com")
+        ) {
           req.logger?.debug(
-            `Facebook URL detected, using custom metadata extraction`
+            `Social media URL detected, using metadata extraction`
           );
-          description = metadata?.og.title ?? "";
-        } else {
-          description = [metadata?.meta.title, metadata?.meta.description]
-            .filter(Boolean)
-            .join(" ");
+
+          const metadata = await getMetadata(url);
+
+          if (url.includes("facebook.com")) {
+            req.logger?.debug(
+              `Facebook URL detected, using custom metadata extraction`
+            );
+            description = metadata?.og.title ?? "";
+          } else {
+            description = [metadata?.meta.title, metadata?.meta.description]
+              .filter(Boolean)
+              .join(" ");
+          }
+          contentThumbnail = metadata?.og.image ?? "";
         }
-        contentThumbnail = metadata?.og.image ?? "";
+        // For all other URLs - use Jina API directly
+        else {
+          try {
+            req.logger?.debug(
+              `Non-social media URL detected, fetching full webpage content via Jina API: ${url}`
+            );
+
+            const jinaResponse = await fetch(`https://r.jina.ai/${url}`, {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${process.env.JINA_API_TOKEN}`,
+              },
+            });
+
+            if (jinaResponse.ok) {
+              const webpageContent = await jinaResponse.text();
+              if (webpageContent && webpageContent.trim().length > 0) {
+                // Use the full webpage content
+                description = webpageContent;
+                req.logger?.debug(
+                  `Successfully extracted webpage content (${webpageContent.length} characters)`
+                );
+              } else {
+                req.logger?.warn(`Jina API returned empty content`);
+                description = "No content available from URL";
+              }
+            } else {
+              req.logger?.warn(
+                `Jina API request failed with status: ${jinaResponse.status}`
+              );
+              description = "Failed to fetch content from URL";
+            }
+          } catch (jinaError) {
+            req.logger?.warn(
+              `Failed to fetch webpage content via Jina API:`,
+              jinaError
+            );
+            description = "Error fetching content from URL";
+          }
+        }
       }
 
       console.log("Desc is ", description);
@@ -1285,9 +1391,15 @@ app.get(
       // Validate query parameters
       const { userLastLogin } = tripContentQuerySchema.parse(req.query);
 
-      const lastLoginDate = userLastLogin
-        ? new Date(userLastLogin * 1000)
-        : null;
+      // Determine the last login time to use for filtering new content
+      let lastLoginDate: Date | null = null;
+      if (userLastLogin) {
+        // Use the provided userLastLogin parameter
+        lastLoginDate = new Date(userLastLogin * 1000);
+      } else if (currentUser.lastOpened) {
+        // Use the user's last opened time from the database
+        lastLoginDate = new Date(currentUser.lastOpened);
+      }
 
       // Verify user has access to this trip
       const userInTrip = await isUserInTrip(currentUser.id, tripId);
@@ -1792,6 +1904,14 @@ const UpdateBucketListSchema = z.object({
   countries: z
     .array(z.string())
     .min(1, "At least one country must be selected"),
+});
+
+const EditTripNameSchema = z.object({
+  tripId: z.string().uuid(),
+  newName: z
+    .string()
+    .min(1, "Trip name is required")
+    .max(100, "Trip name too long"),
 });
 
 // API to mark a place as must-do for a trip
@@ -2523,6 +2643,15 @@ const UpdateContentSchema = z.object({
   content: z.string().min(1, "Content/transcript is required"),
 });
 
+const UpdateContentStatusSchema = z.object({
+  contentId: z.string().uuid("Invalid content ID format"),
+  status: z.enum(["PROCESSING", "COMPLETED", "FAILED"], {
+    errorMap: () => ({
+      message: "Status must be one of: PROCESSING, COMPLETED, FAILED",
+    }),
+  }),
+});
+
 // Add this endpoint to your main Express app file
 app.post(
   "/api/update-content",
@@ -2541,6 +2670,20 @@ app.post(
       // Verify the content exists and user has access
       const existingContent = await prisma.content.findUnique({
         where: { id: content_id },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          trip: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
       });
 
       if (!existingContent) {
@@ -2746,6 +2889,32 @@ app.post(
         `Updated content entry with transcript data ${content_id}`
       );
 
+      // Get total pins count from database for notification
+      const totalPinsCount = await prisma.pin.count({
+        where: { contentId: content_id },
+      });
+
+      // Send notifications to trip members about pins added (using total count from database)
+      if (totalPinsCount > 0) {
+        try {
+          await sendPinAddedNotifications(
+            trip_id,
+            existingContent.user.id,
+            totalPinsCount,
+            existingContent.trip.name,
+            existingContent.user.name,
+            title || existingContent.title || undefined,
+            existingContent.id
+          );
+        } catch (notificationError) {
+          console.error(
+            "Error sending pin added notifications:",
+            notificationError
+          );
+          // Don't fail the request if notifications fail
+        }
+      }
+
       // Generate embeddings for the updated content in the background
       try {
         console.log(
@@ -2794,6 +2963,96 @@ app.post(
       } else {
         console.error(`Error processing update content request:`, error);
         res.status(500).json({ error: "Internal server error." });
+      }
+    }
+  }
+);
+
+// API to update content status
+app.patch(
+  "/api/update-content-status",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const validatedData = UpdateContentStatusSchema.parse(req.body);
+      const { contentId, status } = validatedData;
+
+      console.log(
+        `Received request to update content status: contentId=${contentId}, status=${status}`
+      );
+      req.logger?.info(
+        `Update content status request: contentId=${contentId}, status=${status}`
+      );
+
+      const existingContent = await prisma.content.findUnique({
+        where: { id: contentId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          trip: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (!existingContent) {
+        res.status(404).json({ error: "Content not found" });
+        return;
+      }
+
+      // Update the content status
+      const updatedContent = await updateContentStatus(contentId, status);
+
+      console.log(
+        `✅ Content status updated successfully: ${contentId} -> ${status}`
+      );
+      req.logger?.info(`Content status updated: ${contentId} -> ${status}`);
+
+      // Optionally emit WebSocket event for status change
+      if (status === "COMPLETED") {
+        emitContentProcessingStatus(
+          existingContent.tripId,
+          contentId,
+          "completed",
+          {
+            pinsCount: existingContent.pins_count,
+            title: existingContent.title,
+          }
+        );
+      } else if (status === "FAILED") {
+        emitContentProcessingStatus(
+          existingContent.tripId,
+          contentId,
+          "failed",
+          {
+            pinsCount: 0,
+            title: existingContent.title,
+          }
+        );
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Content status updated successfully",
+        contentId: contentId,
+        newStatus: status,
+        updatedAt: updatedContent.updatedAt,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json({ error: "Invalid input data", details: error.errors });
+      } else {
+        console.error(`Error updating content status:`, error);
+        req.logger?.error(`Error updating content status:`, error);
+        res.status(500).json({ error: "Internal server error" });
       }
     }
   }
@@ -3055,6 +3314,98 @@ app.get(
   }
 );
 
+// API to get the last processing content with full details for notification
+app.get(
+  "/api/last-processing-content",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      // Get all trips the user is part of
+      const userTrips = await prisma.tripUser.findMany({
+        where: { userId: currentUser.id },
+        select: { tripId: true },
+      });
+
+      const tripIds = userTrips.map((trip) => trip.tripId);
+
+      if (tripIds.length === 0) {
+        res.status(200).json({
+          success: true,
+          lastProcessingContent: null,
+        });
+        return;
+      }
+
+      // Calculate the time 10 minutes ago
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+
+      // Get the most recent content in PROCESSING status for user's trips
+      // that was created within the last 10 minutes
+      const lastProcessingContent = await prisma.content.findFirst({
+        where: {
+          tripId: { in: tripIds },
+          status: "PROCESSING",
+          createdAt: {
+            gte: tenMinutesAgo,
+          },
+        },
+        include: {
+          trip: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc", // Get the most recent one
+        },
+      });
+
+      if (!lastProcessingContent) {
+        res.status(200).json({
+          success: true,
+          lastProcessingContent: null,
+        });
+        return;
+      }
+
+      req.logger?.info(
+        `Retrieved last processing content ${lastProcessingContent.id} for user ${currentUser.id}`
+      );
+
+      res.status(200).json({
+        success: true,
+        lastProcessingContent: {
+          id: lastProcessingContent.id,
+          title: lastProcessingContent.title,
+          tripId: lastProcessingContent.tripId,
+          tripName: lastProcessingContent.trip.name,
+          userId: lastProcessingContent.userId,
+          userName: lastProcessingContent.user.name,
+          createdAt: lastProcessingContent.createdAt,
+          url: lastProcessingContent.url,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching last processing content:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
 // API to update user's bucket list countries
 app.put(
   "/api/update-bucket-list",
@@ -3103,6 +3454,224 @@ app.put(
         console.error("Error updating bucket list countries:", error);
         res.status(500).json({ error: "Internal server error" });
       }
+    }
+  }
+);
+
+// API to edit trip name
+app.put(
+  "/api/edit-trip-name",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { tripId, newName } = EditTripNameSchema.parse(req.body);
+
+      req.logger?.info(
+        `Edit trip name request: tripId=${tripId}, newName=${newName}, user=${currentUser.id}`
+      );
+
+      // Verify the trip exists
+      const trip = await getTripById(tripId);
+      if (!trip) {
+        res.status(404).json({ error: "Trip not found" });
+        return;
+      }
+
+      // Verify user has access to this trip and is a member
+      const userRole = await getUserRoleInTrip(currentUser.id, tripId);
+      if (!userRole) {
+        res.status(403).json({
+          error: "You don't have access to this trip",
+        });
+        return;
+      }
+
+      // Update the trip name
+      const updatedTrip = await prisma.trip.update({
+        where: { id: tripId },
+        data: { name: newName.trim() },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          updatedAt: true,
+        },
+      });
+
+      req.logger?.info(
+        `Trip name updated successfully: tripId=${tripId}, newName=${newName}, user=${currentUser.id}`
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Trip name updated successfully",
+        trip: updatedTrip,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: "Invalid input data",
+          details: error.errors,
+        });
+      } else {
+        console.error("Error updating trip name:", error);
+        req.logger?.error(`Failed to update trip name: ${error}`);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+);
+
+// API to update user's last opened time
+app.post(
+  "/api/update-last-opened",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      // Update the user's last opened time
+      const updatedUser = await prisma.user.update({
+        where: { id: currentUser.id },
+        data: { lastOpened: new Date() },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          lastOpened: true,
+          updatedAt: true,
+        },
+      });
+
+      req.logger?.info(`Last opened time updated for user ${currentUser.id}`);
+
+      res.status(200).json({
+        success: true,
+        message: "Last opened time updated successfully",
+        user: updatedUser,
+      });
+    } catch (error) {
+      console.error("Error updating last opened time:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// API to get content summary since user's last login
+app.get(
+  "/api/content-summary-since-last-login",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      // Use the user's last opened time from the database
+      const lastLoginDate = currentUser.lastOpened || null;
+
+      req.logger?.info(
+        `Content summary request for user ${currentUser.id}, lastOpened: ${lastLoginDate}`
+      );
+
+      // Get content summary since last login
+      const contentSummaryResult = await getContentSummarySinceLastLogin(
+        currentUser.id,
+        lastLoginDate
+      );
+
+      const { completedSummary, processingItems } = contentSummaryResult;
+
+      req.logger?.info(
+        `Content summary result: ${completedSummary.length} completed trip summaries, ${processingItems.length} processing items found`
+      );
+
+      res.status(200).json({
+        success: true,
+        lastLoginDate: lastLoginDate,
+        summary: completedSummary,
+        processingItems: processingItems,
+        hasNewContent:
+          completedSummary.length > 0 || processingItems.length > 0,
+      });
+    } catch (error) {
+      console.error("Error fetching content summary:", error);
+      req.logger?.error(`Failed to fetch content summary: ${error}`);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// Debug endpoint to check FCM tokens for a user
+app.get(
+  "/api/debug/fcm-tokens/:userId",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { userId } = req.params;
+
+      console.log(`🔍 Debug: Checking FCM tokens for user ${userId}`);
+
+      const tokens = await prisma.fcmToken.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          fcmToken: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          deviceInfo: true,
+        },
+      });
+
+      console.log(`📱 Found ${tokens.length} FCM tokens for user ${userId}:`);
+      tokens.forEach((token, idx) => {
+        console.log(
+          `  ${idx + 1}. Active: ${
+            token.isActive
+          }, Created: ${token.createdAt.toISOString()}`
+        );
+        console.log(
+          `     Token: ${token.fcmToken.substring(
+            0,
+            20
+          )}...${token.fcmToken.substring(token.fcmToken.length - 10)}`
+        );
+        console.log(`     Device: ${JSON.stringify(token.deviceInfo)}`);
+      });
+
+      res.status(200).json({
+        success: true,
+        userId,
+        totalTokens: tokens.length,
+        activeTokens: tokens.filter((t) => t.isActive).length,
+        tokens: tokens.map((token) => ({
+          id: token.id,
+          isActive: token.isActive,
+          createdAt: token.createdAt,
+          updatedAt: token.updatedAt,
+          deviceInfo: token.deviceInfo,
+          tokenPreview: `${token.fcmToken.substring(
+            0,
+            20
+          )}...${token.fcmToken.substring(token.fcmToken.length - 10)}`,
+        })),
+      });
+    } catch (error) {
+      console.error("Error fetching debug FCM tokens:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
   }
 );

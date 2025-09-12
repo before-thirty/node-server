@@ -20,13 +20,76 @@ export interface CaptionAnalysisResponse {
   additional_info: string | null;
   location: string | null;
   classification:
+    | "Food"
+    | "Night life"
+    | "Activities"
+    | "Nature"
     | "Attraction"
-    | "Food Place"
-    | "Culture Place"
-    | "Adventure Place"
+    | "Shopping"
+    | "Accommodation"
     | "Not Pinned"
     | null;
+  lat: number | null;
+  long: number | null;
 }
+
+// JSON Schema for location extraction structured output
+const locationExtractionSchema = {
+  type: "json_schema" as const,
+  json_schema: {
+    name: "location_extraction",
+    description: "Extract location information from captions",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        locations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: ["string", "null"] },
+              title: { type: ["string", "null"] },
+              additional_info: { type: ["string", "null"] },
+              location: { type: ["string", "null"] },
+              classification: {
+                type: ["string", "null"],
+                enum: ["Food", "Night life", "Activities", "Nature", "Attraction", "Shopping", "Accommodation", "Not Pinned", null]
+              },
+              lat: { type: ["number", "null"] },
+              long: { type: ["number", "null"] }
+            },
+            required: ["name", "title", "additional_info", "location", "classification", "lat", "long"],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ["locations"],
+      additionalProperties: false
+    }
+  }
+};
+
+// JSON Schema for place category classification
+const placeCategorySchema = {
+  type: "json_schema" as const,
+  json_schema: {
+    name: "place_category",
+    description: "Classify a place into a category",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          enum: ["Food", "Night life", "Activities", "Nature", "Attraction", "Shopping", "Accommodation"]
+        }
+      },
+      required: ["category"],
+      additionalProperties: false
+    }
+  }
+};
 
 export async function extractLocationAndClassify(
   caption: string,
@@ -45,16 +108,25 @@ export async function extractLocationAndClassify(
           content: `Given the caption: "${caption}", extract the location, classification, and description.`,
         },
       ],
+      response_format: locationExtractionSchema,
     });
 
-    // Parse and return the JSON object from the response
+    // Parse and return the structured response
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error("No response content from OpenAI");
+    
     req.logger?.debug(`Response from ChatGPT ${content}`);
 
-    return JSON.parse(content) as CaptionAnalysisResponse[];
+    // Handle refusal case
+    if (response.choices[0]?.message?.refusal) {
+      req.logger?.error(`OpenAI refused the request: ${response.choices[0].message.refusal}`);
+      throw new Error("OpenAI refused to process the request");
+    }
+
+    const parsedResponse = JSON.parse(content);
+    return parsedResponse.locations as CaptionAnalysisResponse[];
   } catch (error) {
-    req.logger?.debug("Error calling OpenAI API:", error);
+    req.logger?.error("Error calling OpenAI API:", error);
     throw new Error("Failed to analyze caption.");
   }
 }
@@ -117,32 +189,20 @@ export async function classifyPlaceCategory(placeDetails: {
           content: placeInfo,
         },
       ],
+      response_format: placeCategorySchema,
     });
 
     const content = response.choices[0]?.message?.content;
     if (!content) throw new Error("No response content from OpenAI");
 
-    // Clean the response to get just the category
-    const category = content.trim().replace(/"/g, "");
-
-    // Validate the category
-    const validCategories = [
-      "Food",
-      "tourist spot",
-      "Night life",
-      "Activities",
-      "nature",
-      "attraction",
-      "accommodation",
-    ];
-    if (!validCategories.includes(category)) {
-      console.warn(
-        `Invalid category returned: ${category}, defaulting to attraction`
-      );
-      return "attraction";
+    // Handle refusal case
+    if (response.choices[0]?.message?.refusal) {
+      console.error(`OpenAI refused the request: ${response.choices[0].message.refusal}`);
+      return "Attraction"; // Default fallback
     }
 
-    return category;
+    const parsedResponse = JSON.parse(content);
+    return parsedResponse.category;
   } catch (error) {
     console.error("Error classifying place category:", error);
     return "Attraction"; // Default fallback

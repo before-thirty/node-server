@@ -1,31 +1,34 @@
 import { sendNotificationToUsers } from './notificationService';
 
 // Trip-related notifications
-export const sendTripInviteNotification = async (inviterName: string, tripName: string, userIds: string[]) => {
+export const sendTripInviteNotification = async (inviterName: string, tripName: string, userIds: string[], tripId: string) => {
   return await sendNotificationToUsers(userIds, {
     title: `You're invited to ${tripName}!`,
     body: `${inviterName} invited you to join their trip`,
     data: {
       type: 'trip_invite',
       tripName,
+      tripId,
       inviterName,
     },
   });
 };
 
-export const sendNewContentNotification = async (authorName: string, tripName: string, userIds: string[]) => {
+export const sendNewContentNotification = async (authorName: string, tripName: string, userIds: string[], tripId: string, contentId?: string) => {
   return await sendNotificationToUsers(userIds, {
     title: `New content in ${tripName}`,
     body: `${authorName} added new content to your trip`,
     data: {
       type: 'new_content',
       tripName,
+      tripId,
       authorName,
+      contentId: contentId || '',
     },
   });
 };
 
-export const sendNewPinNotification = async (authorName: string, placeName: string, tripName: string, userIds: string[]) => {
+export const sendNewPinNotification = async (authorName: string, placeName: string, tripName: string, userIds: string[], tripId: string, contentId?: string) => {
   return await sendNotificationToUsers(userIds, {
     title: `New pin added: ${placeName}`,
     body: `${authorName} pinned ${placeName} in ${tripName}`,
@@ -33,7 +36,9 @@ export const sendNewPinNotification = async (authorName: string, placeName: stri
       type: 'new_pin',
       placeName,
       tripName,
+      tripId,
       authorName,
+      contentId: contentId || '',
     },
   });
 };
