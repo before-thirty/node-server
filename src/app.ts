@@ -1026,7 +1026,6 @@ app.post("/api/signin-with-google", async (req, res) => {
   try {
     let user = await getUserByFirebaseId(firebaseId);
     let isNewUser = false;
-
     if (!user) {
       user = await prisma.user.create({
         data: {
@@ -1136,12 +1135,19 @@ app.post(
       );
 
       // Update user metadata to mark local trip as created
-      // Update user metadata to mark local trip as created
+      // Fetch the complete user data to preserve existing metadata
+      const currentUserData = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { metadata: true },
+      });
+
+      const userMetadata = currentUserData?.metadata || {};
+
       const updatedUser = await prisma.user.update({
         where: { id: user.id },
         data: {
           metadata: {
-            ...((user as any).metadata || {}),
+            ...(userMetadata as object),
             has_local_trip: true,
           },
         } as any,
