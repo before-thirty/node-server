@@ -81,6 +81,7 @@ import {
   sendPinAddedNotifications,
 } from "./services/notificationService";
 import { emitContentProcessingStatus } from "./services/websocketService";
+import { DEMO_PIN_DATA } from "./data/demoPinData";
 
 const prisma = new PrismaClient();
 
@@ -102,6 +103,8 @@ app.use("/api/moderation", moderationRoutes);
 // );
 const PORT = process.env.PORT || 5000;
 const baseUrl = process.env.BASE_URL || "http://localhost" + `:${PORT}`;
+
+
 
 const getFinalUrl = async (url: string) => {
   const res = await fetch(url, { redirect: "follow" }); // follows redirects automatically
@@ -211,29 +214,64 @@ const processContentAnalysisAsync = async (
   try {
     console.log(`Starting async processing for content ${contentId}`);
 
-    // Extract structured data using AI
-    const analysis = await extractLocationAndClassify(description, req);
+    // Check if this is a demo trip and first content
+    const trip = await prisma.trip.findUnique({
+      where: { id: tripId },
+      select: { metadata: true },
+    });
 
-    // Get title from the first analysis object, if present
-    const title =
-      analysis && analysis.length > 0 && analysis[0].title
-        ? analysis[0].title
-        : "";
+    const isJapanDemoTrip =
+      trip?.metadata &&
+      typeof trip.metadata === "object" &&
+      "type" in trip.metadata &&
+      trip.metadata.type === "japan_demo";
+
+    // Check if this is the first content in the trip
+    const existingContentCount = await prisma.content.count({
+      where: { tripId: tripId },
+    });
+    const isFirstContent = existingContentCount === 1; // 1 because we already created this content
+
+    // Use hardcoded data for demo trip's first content
+    let analysis: any[];
+    let title: string;
+    let pinsCount: number;
+    let shouldSkipProcessing = false;
+
+    if (isJapanDemoTrip && isFirstContent) {
+      console.log(`Using hardcoded demo data for URL: ${url}`);
+      const demoData = DEMO_PIN_DATA;
+      
+      // Parse the structured data to get analysis format
+      try {
+        analysis = JSON.parse(demoData.structuredData);
+        title = demoData.title;
+        pinsCount = demoData.pins_count;
+        shouldSkipProcessing = true;
+      } catch (error) {
+        console.error("Error parsing demo data, falling back to AI:", error);
+        analysis = await extractLocationAndClassify(description, req);
+        title = analysis && analysis.length > 0 && analysis[0].title ? analysis[0].title : "";
+        pinsCount = analysis.filter((a) => a.classification !== "Not Pinned").length;
+      }
+    } else {
+      // Extract structured data using AI
+      analysis = await extractLocationAndClassify(description, req);
+      title = analysis && analysis.length > 0 && analysis[0].title ? analysis[0].title : "";
+      pinsCount = analysis.filter((a) => a.classification !== "Not Pinned").length;
+    }
 
     // Update the Content entry with structured data and title
-    const pinsCount = analysis.filter(
-      (a) => a.classification !== "Not Pinned"
-    ).length;
 
     // Check if URL already exists in content table (excluding current content)
     console.log("URL is ", url);
 
-    // Determine if external API calls are needed
-    const needsExternalAPI =
-      url.includes("instagram.com") || url.includes("tiktok.com");
+    // Determine if external API calls are needed (skip for demo trips)
+    const needsExternalAPI = !shouldSkipProcessing && 
+      (url.includes("instagram.com") || url.includes("tiktok.com"));
 
     // Fire external API calls without waiting for response if needed
-    if (url.includes("instagram.com")) {
+    if (!shouldSkipProcessing && url.includes("instagram.com")) {
       console.log("Instagram URL detected, calling analysis API");
       fetch("https://kadshnkjadnk.pinspire.co.in/api/analyze", {
         method: "POST",
@@ -245,7 +283,7 @@ const processContentAnalysisAsync = async (
           error
         );
       });
-    } else if (url.includes("tiktok.com")) {
+    } else if (!shouldSkipProcessing && url.includes("tiktok.com")) {
       console.log("TikTok URL detected, calling analysis API");
       fetch("https://kadshnkjadnk.pinspire.co.in/api/tiktok-analyze", {
         method: "POST",
@@ -342,108 +380,124 @@ const processContentAnalysisAsync = async (
       );
     }
 
-    const trip = await prisma.trip.findUnique({
-      where: { id: tripId },
-      select: { metadata: true },
-    });
-
-    const isJapanDemoTrip =
-      trip?.metadata &&
-      typeof trip.metadata === "object" &&
-      "type" in trip.metadata &&
-      trip.metadata.type === "japan_demo";
-
     let pinsCreated = 0;
 
     // Process each analysis object for pin creation
-    await Promise.all(
-      analysis.map(async (analysis) => {
-        if (analysis.classification === "Not Pinned") {
-          return;
-        }
-
-        const full_loc =
-          (analysis.name ?? "") + " " + (analysis.location ?? "");
-
-        // Step 1: Get Place ID
-        const placeId = await getPlaceId(full_loc, req);
-        let coordinates;
-        let placeCacheId;
-
-        // Step 2: Check if the place exists in the cache
-        let placeCache = await getPlaceCacheById(placeId);
-
-        if (!placeCache) {
-          req.logger?.debug(
-            "Could not find place in place Cache.. getting full place details"
-          );
-
-          // Step 3: If not in cache, fetch full place details (includes coordinates)
-          const placeDetails = await getFullPlaceDetails(full_loc, req);
-
-          req.logger?.debug(
-            `Place details for placeID - ${placeId} is - ${placeDetails}`
-          );
-
-          // Use coordinates from place details instead of separate API call
-          coordinates = placeDetails.location
-            ? {
-                lat: placeDetails.location.latitude,
-                lng: placeDetails.location.longitude,
-              }
-            : null;
-
-          if (!coordinates) {
-            req.logger?.error(`No coordinates found for place: ${full_loc}`);
-            throw new Error(`Could not get coordinates for place: ${full_loc}`);
-          }
-
-          req.logger?.debug(
-            `Coordinates for placeID - ${placeId} is - ${coordinates}`
-          );
-
-          // Step 4: Store in cache
-          placeCache = await createPlaceCache({
-            placeId: placeDetails.id,
-            name: placeDetails.name,
-            rating: placeDetails.rating ?? null,
-            userRatingCount: placeDetails.userRatingCount ?? null,
-            websiteUri: placeDetails.websiteUri ?? null,
-            currentOpeningHours: placeDetails.currentOpeningHours,
-            regularOpeningHours: placeDetails.regularOpeningHours,
-            lat: coordinates.lat,
-            lng: coordinates.lng,
-            images: placeDetails.images ?? [],
-            utcOffsetMinutes: placeDetails.utcOffsetMinutes ?? null,
-          });
-
-          req.logger?.debug(
-            `Created new entry in place cache ${placeCache.id} for placeID ${placeId}`
-          );
-        } else {
-          req.logger?.debug(`Found place id - ${placeId} in place cache`);
-          coordinates = { lat: placeCache.lat, lng: placeCache.lng };
-        }
-
-        placeCacheId = placeCache.id;
-
-        // Step 5: Create Pin linked to PlaceCache
+    if (shouldSkipProcessing && isJapanDemoTrip && isFirstContent && DEMO_PIN_DATA[url]) {
+      // Use hardcoded pin data for demo
+      const demoData = DEMO_PIN_DATA[url];
+      for (const pinData of demoData.pins) {
+        // The places should already be in place cache, just create the pins
         const pin = await createPin({
-          name: analysis.name ?? "",
-          category: analysis.classification ?? "",
+          name: pinData.title ?? "",
+          category: pinData.classification ?? "",
           contentId: contentId,
-          placeCacheId: placeCacheId,
-          coordinates: coordinates,
-          description: analysis.additional_info ?? "",
+          placeCacheId: pinData.place.id, // Use the existing place cache ID
+          coordinates: { lat: pinData.place.lat, lng: pinData.place.lng },
+          description: pinData.description ?? "",
         });
 
-        pinsCreated++;
+        if (pin) {
+          pinsCreated += 1;
+        }
 
         req.logger?.info(
-          `Created Pin - ${pin.id} with content_id - ${contentId} and place_id - ${placeCacheId}`
+          `✅ Created demo pin: ${pinData.title} for content ${contentId}`
         );
-      })
-    );
+      }
+    } else {
+      // Original pin creation logic
+      await Promise.all(
+        analysis.map(async (analysis) => {
+          if (analysis.classification === "Not Pinned") {
+            return;
+          }
+
+          const full_loc =
+            (analysis.name ?? "") + " " + (analysis.location ?? "");
+
+          // Step 1: Get Place ID
+          const placeId = await getPlaceId(full_loc, req);
+          let coordinates;
+          let placeCacheId;
+
+          // Step 2: Check if the place exists in the cache
+          let placeCache = await getPlaceCacheById(placeId);
+
+          if (!placeCache) {
+            req.logger?.debug(
+              "Could not find place in place Cache.. getting full place details"
+            );
+
+            // Step 3: If not in cache, fetch full place details (includes coordinates)
+            const placeDetails = await getFullPlaceDetails(full_loc, req);
+
+            req.logger?.debug(
+              `Place details for placeID - ${placeId} is - ${placeDetails}`
+            );
+
+            // Use coordinates from place details instead of separate API call
+            coordinates = placeDetails.location
+              ? {
+                  lat: placeDetails.location.latitude,
+                  lng: placeDetails.location.longitude,
+                }
+              : null;
+
+            if (!coordinates) {
+              req.logger?.error(`No coordinates found for place: ${full_loc}`);
+              throw new Error(`Could not get coordinates for place: ${full_loc}`);
+            }
+
+            req.logger?.debug(
+              `Coordinates for placeID - ${placeId} is - ${coordinates}`
+            );
+
+            // Step 4: Store in cache
+            placeCache = await createPlaceCache({
+              placeId: placeDetails.id,
+              name: placeDetails.name,
+              rating: placeDetails.rating ?? null,
+              userRatingCount: placeDetails.userRatingCount ?? null,
+              websiteUri: placeDetails.websiteUri ?? null,
+              currentOpeningHours: placeDetails.currentOpeningHours,
+              regularOpeningHours: placeDetails.regularOpeningHours,
+              lat: coordinates.lat,
+              lng: coordinates.lng,
+              images: placeDetails.images ?? [],
+              utcOffsetMinutes: placeDetails.utcOffsetMinutes ?? null,
+            });
+
+            req.logger?.debug(
+              `Created new entry in place cache ${placeCache.id} for placeID ${placeId}`
+            );
+          } else {
+            req.logger?.debug(`Found place id - ${placeId} in place cache`);
+            coordinates = { lat: placeCache.lat, lng: placeCache.lng };
+          }
+
+          placeCacheId = placeCache.id;
+
+          // Step 5: Create Pin linked to PlaceCache
+          const pin = await createPin({
+            name: analysis.name ?? "",
+            category: analysis.classification ?? "",
+            contentId: contentId,
+            placeCacheId: placeCacheId,
+            coordinates: coordinates,
+            description: analysis.additional_info ?? "",
+          });
+
+          if (pin) {
+            pinsCreated++;
+          }
+
+          req.logger?.info(
+            `Created Pin - ${pin.id} with content_id - ${contentId} and place_id - ${placeCacheId}`
+          );
+        })
+      );
+    }
 
     // If this is a Japan demo trip and at least one pin was created, update user metadata
     if (isJapanDemoTrip && pinsCreated > 0) {
@@ -3683,6 +3737,85 @@ app.get(
       });
     } catch (error) {
       console.error("Error fetching debug FCM tokens:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// DEBUG: API to get content analysis data for hardcoding demo pins
+app.get(
+  "/api/debug/content-analysis/:contentId",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { contentId } = req.params;
+
+      // Get content with all related data
+      const content = await prisma.content.findUnique({
+        where: { id: contentId },
+        include: {
+          pins: {
+            include: {
+              placeCache: true,
+            },
+          },
+          trip: true,
+          user: true,
+        },
+      });
+
+      if (!content) {
+        res.status(404).json({ error: "Content not found" });
+        return;
+      }
+
+      // Format the response with all data needed for hardcoding
+      const analysisData = {
+        contentId: content.id,
+        url: content.url,
+        title: content.title,
+        rawData: content.rawData,
+        structuredData: content.structuredData,
+        pins_count: content.pins_count,
+        pins: content.pins.map((pin: any) => ({
+          id: pin.id,
+          title: pin.title,
+          description: pin.description,
+          classification: pin.classification,
+          place: pin.placeCache ? {
+            id: pin.placeCache.id,
+            name: pin.placeCache.name,
+            address: pin.placeCache.address,
+            lat: pin.placeCache.lat,
+            lng: pin.placeCache.lng,
+            place_id: pin.placeCache.placeId,
+            rating: pin.placeCache.rating,
+            user_ratings_total: pin.placeCache.userRatingCount,
+            price_level: pin.placeCache.priceLevel,
+            photos: pin.placeCache.images,
+            types: pin.placeCache.types,
+            opening_hours: pin.placeCache.regularOpeningHours,
+            website: pin.placeCache.websiteUri,
+            phone_number: pin.placeCache.phoneNumber,
+            business_status: pin.placeCache.businessStatus,
+          } : null,
+        })),
+        trip: {
+          id: content.trip.id,
+          name: content.trip.name,
+          metadata: content.trip.metadata,
+        },
+        user: {
+          id: content.user.id,
+          name: content.user.name,
+        },
+      };
+
+      res.status(200).json({
+        success: true,
+        data: analysisData,
+      });
+    } catch (error) {
+      console.error("Error fetching content analysis data:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   }
