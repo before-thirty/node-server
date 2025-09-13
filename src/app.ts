@@ -104,8 +104,6 @@ app.use("/api/moderation", moderationRoutes);
 const PORT = process.env.PORT || 5000;
 const baseUrl = process.env.BASE_URL || "http://localhost" + `:${PORT}`;
 
-
-
 const getFinalUrl = async (url: string) => {
   const res = await fetch(url, { redirect: "follow" }); // follows redirects automatically
   return res.url; // gives final resolved URL after following redirects
@@ -241,7 +239,7 @@ const processContentAnalysisAsync = async (
     if (isJapanDemoTrip && isFirstContent) {
       console.log(`Using hardcoded demo data for URL: ${url}`);
       const demoData = DEMO_PIN_DATA;
-      
+
       // Parse the structured data to get analysis format
       try {
         analysis = JSON.parse(demoData.structuredData);
@@ -251,14 +249,24 @@ const processContentAnalysisAsync = async (
       } catch (error) {
         console.error("Error parsing demo data, falling back to AI:", error);
         analysis = await extractLocationAndClassify(description, req);
-        title = analysis && analysis.length > 0 && analysis[0].title ? analysis[0].title : "";
-        pinsCount = analysis.filter((a) => a.classification !== "Not Pinned").length;
+        title =
+          analysis && analysis.length > 0 && analysis[0].title
+            ? analysis[0].title
+            : "";
+        pinsCount = analysis.filter(
+          (a) => a.classification !== "Not Pinned"
+        ).length;
       }
     } else {
       // Extract structured data using AI
       analysis = await extractLocationAndClassify(description, req);
-      title = analysis && analysis.length > 0 && analysis[0].title ? analysis[0].title : "";
-      pinsCount = analysis.filter((a) => a.classification !== "Not Pinned").length;
+      title =
+        analysis && analysis.length > 0 && analysis[0].title
+          ? analysis[0].title
+          : "";
+      pinsCount = analysis.filter(
+        (a) => a.classification !== "Not Pinned"
+      ).length;
     }
 
     // Update the Content entry with structured data and title
@@ -267,7 +275,8 @@ const processContentAnalysisAsync = async (
     console.log("URL is ", url);
 
     // Determine if external API calls are needed (skip for demo trips)
-    const needsExternalAPI = !shouldSkipProcessing && 
+    const needsExternalAPI =
+      !shouldSkipProcessing &&
       (url.includes("instagram.com") || url.includes("tiktok.com"));
 
     // Fire external API calls without waiting for response if needed
@@ -383,7 +392,12 @@ const processContentAnalysisAsync = async (
     let pinsCreated = 0;
 
     // Process each analysis object for pin creation
-    if (shouldSkipProcessing && isJapanDemoTrip && isFirstContent && DEMO_PIN_DATA[url]) {
+    if (
+      shouldSkipProcessing &&
+      isJapanDemoTrip &&
+      isFirstContent &&
+      DEMO_PIN_DATA[url]
+    ) {
       // Use hardcoded pin data for demo
       const demoData = DEMO_PIN_DATA[url];
       for (const pinData of demoData.pins) {
@@ -446,7 +460,9 @@ const processContentAnalysisAsync = async (
 
             if (!coordinates) {
               req.logger?.error(`No coordinates found for place: ${full_loc}`);
-              throw new Error(`Could not get coordinates for place: ${full_loc}`);
+              throw new Error(
+                `Could not get coordinates for place: ${full_loc}`
+              );
             }
 
             req.logger?.debug(
@@ -1241,6 +1257,12 @@ app.put(
         throw new Error("User not authenticated");
       }
 
+      // First, fetch the complete user data to get existing metadata
+      const currentUserData = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { metadata: true },
+      });
+
       const updateData: any = {};
       if (firstTourCompleted !== undefined) {
         updateData.has_completed_first_tour = firstTourCompleted;
@@ -1252,13 +1274,17 @@ app.put(
         updateData.has_completed_third_tour = thirdTourCompleted;
       }
 
+      // Preserve existing metadata and merge with new data
+      const userMetadata = currentUserData?.metadata || {};
+      const updatedMetadata = {
+        ...(userMetadata as object),
+        ...updateData,
+      };
+
       const updatedUser = await prisma.user.update({
         where: { id: user.id },
         data: {
-          metadata: {
-            ...((user as any).metadata || {}),
-            ...updateData,
-          },
+          metadata: updatedMetadata,
         } as any,
       });
 
@@ -3781,23 +3807,25 @@ app.get(
           title: pin.title,
           description: pin.description,
           classification: pin.classification,
-          place: pin.placeCache ? {
-            id: pin.placeCache.id,
-            name: pin.placeCache.name,
-            address: pin.placeCache.address,
-            lat: pin.placeCache.lat,
-            lng: pin.placeCache.lng,
-            place_id: pin.placeCache.placeId,
-            rating: pin.placeCache.rating,
-            user_ratings_total: pin.placeCache.userRatingCount,
-            price_level: pin.placeCache.priceLevel,
-            photos: pin.placeCache.images,
-            types: pin.placeCache.types,
-            opening_hours: pin.placeCache.regularOpeningHours,
-            website: pin.placeCache.websiteUri,
-            phone_number: pin.placeCache.phoneNumber,
-            business_status: pin.placeCache.businessStatus,
-          } : null,
+          place: pin.placeCache
+            ? {
+                id: pin.placeCache.id,
+                name: pin.placeCache.name,
+                address: pin.placeCache.address,
+                lat: pin.placeCache.lat,
+                lng: pin.placeCache.lng,
+                place_id: pin.placeCache.placeId,
+                rating: pin.placeCache.rating,
+                user_ratings_total: pin.placeCache.userRatingCount,
+                price_level: pin.placeCache.priceLevel,
+                photos: pin.placeCache.images,
+                types: pin.placeCache.types,
+                opening_hours: pin.placeCache.regularOpeningHours,
+                website: pin.placeCache.websiteUri,
+                phone_number: pin.placeCache.phoneNumber,
+                business_status: pin.placeCache.businessStatus,
+              }
+            : null,
         })),
         trip: {
           id: content.trip.id,
