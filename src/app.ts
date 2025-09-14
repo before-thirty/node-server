@@ -395,11 +395,9 @@ const processContentAnalysisAsync = async (
     if (
       shouldSkipProcessing &&
       isJapanDemoTrip &&
-      isFirstContent &&
-      DEMO_PIN_DATA[url]
-    ) {
+      isFirstContent ) {
       // Use hardcoded pin data for demo
-      const demoData = DEMO_PIN_DATA[url];
+      const demoData = DEMO_PIN_DATA;
       for (const pinData of demoData.pins) {
         // The places should already be in place cache, just create the pins
         const pin = await createPin({
