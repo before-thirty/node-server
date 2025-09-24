@@ -175,7 +175,7 @@ export async function getFullPlaceDetails(
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask":
-          "places.addressComponents,places.formattedAddress,places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,places.currentOpeningHours,places.regularOpeningHours,places.photos,places.utcOffsetMinutes,places.location,places.editorialSummary,places.businessStatus,places.priceLevel,places.types",
+          "places.addressComponents,places.formattedAddress,places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,places.currentOpeningHours,places.regularOpeningHours,places.photos,places.utcOffsetMinutes,places.location,places.editorialSummary,places.businessStatus,places.priceLevel,places.types,places.googleMapsUri,places.googleMapsLinks",
       },
     };
     const response = await axios.post(url, data, config);
@@ -186,6 +186,10 @@ export async function getFullPlaceDetails(
       );
     }
     const place = places[0];
+    
+    // Log Google Maps URI and Links
+    console.log("Google Maps URI:", place.googleMapsUri);
+    console.log("Google Maps Links:", place.googleMapsLinks);
     // Extract photos field
     const photos = place.photos || [];
     let photoUrls: string[] = [];
@@ -245,7 +249,7 @@ export async function getPlaceDetailsFromId(
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask":
-          "addressComponents,formattedAddress,id,displayName,rating,userRatingCount,websiteUri,currentOpeningHours,regularOpeningHours,photos,utcOffsetMinutes,location,editorialSummary,businessStatus,priceLevel,types",
+          "addressComponents,formattedAddress,id,displayName,rating,userRatingCount,websiteUri,currentOpeningHours,regularOpeningHours,photos,utcOffsetMinutes,location,editorialSummary,businessStatus,priceLevel,types,googleMapsUri,googleMapsLinks",
       },
     };
 
@@ -269,6 +273,10 @@ export async function getPlaceDetailsFromId(
         `No place found by Google Places API for placeId: ${placeId}`
       );
     }
+
+    // Log Google Maps URI and Links
+    console.log("Google Maps URI:", place.googleMapsUri);
+    console.log("Google Maps Links:", place.googleMapsLinks);
 
     // Extract photos field
     const photos = place.photos || [];

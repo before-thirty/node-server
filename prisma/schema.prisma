@@ -293,3 +293,18 @@ enum ContentStatus {
 
   @@schema("app_data")
 }
+
+model CountryDemoData {
+  id          String   @id @default(uuid())
+  countryName String   @unique
+  countryId   String
+  url         String
+  demoData    Json
+  lat         Float?   // Latitude for map display
+  lng         Float?   // Longitude for map display
+  flag        String?  // Country flag emoji
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@schema("app_data")
+}

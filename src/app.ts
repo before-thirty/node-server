@@ -22,6 +22,25 @@ import {
   getPlaceDetailsFromId,
 } from "./helpers/googlemaps";
 import { z } from "zod";
+
+// Type definitions for demo data structure
+interface DemoDataPin {
+  title: string;
+  classification: string;
+  description?: string;
+  place: {
+    id: string;
+    lat: number;
+    lng: number;
+  };
+}
+
+interface DemoData {
+  structuredData: string;
+  title: string;
+  pins_count: number;
+  pins: DemoDataPin[];
+}
 import {
   createPlaceCache,
   getContentPinsPlaceNested,
@@ -81,7 +100,6 @@ import {
   sendPinAddedNotifications,
 } from "./services/notificationService";
 import { emitContentProcessingStatus } from "./services/websocketService";
-import { DEMO_PIN_DATA } from "./data/demoPinData";
 
 const prisma = new PrismaClient();
 
@@ -227,11 +245,26 @@ const processContentAnalysisAsync = async (
       select: { metadata: true },
     });
 
-    const isJapanDemoTrip =
+    // Check for demo trip and extract country ID
+    const isDemoTrip =
       trip?.metadata &&
       typeof trip.metadata === "object" &&
       "type" in trip.metadata &&
-      trip.metadata.type === "japan_demo";
+      trip.metadata.type === "demo";
+
+    const countryId =
+      trip?.metadata &&
+      typeof trip.metadata === "object" &&
+      "countryId" in trip.metadata 
+        ? (trip.metadata as any).countryId
+        : null;
+
+    const countryUuid =
+      trip?.metadata &&
+      typeof trip.metadata === "object" &&
+      "countryUuid" in trip.metadata 
+        ? (trip.metadata as any).countryUuid
+        : null;
 
     // Check if this is the first content in the trip
     const existingContentCount = await prisma.content.count({
@@ -239,24 +272,51 @@ const processContentAnalysisAsync = async (
     });
     const isFirstContent = existingContentCount === 1; // 1 because we already created this content
 
-    // Use hardcoded data for demo trip's first content
+    // Use demo data for demo trip's first content
     let analysis: any[];
     let title: string;
     let pinsCount: number;
     let shouldSkipProcessing = false;
 
-    if (isJapanDemoTrip && isFirstContent) {
-      console.log(`Using hardcoded demo data for URL: ${url}`);
-      const demoData = DEMO_PIN_DATA;
-
-      // Parse the structured data to get analysis format
+    if (isDemoTrip && isFirstContent && (countryUuid || countryId)) {
+      console.log(`Using demo data for country ${countryUuid || countryId} for URL: ${url}`);
+      
       try {
-        analysis = JSON.parse(demoData.structuredData);
-        title = demoData.title;
-        pinsCount = demoData.pins_count;
-        shouldSkipProcessing = true;
+        // Fetch demo data from database based on country UUID or fallback to ID
+        let countryDemoData;
+        if (countryUuid) {
+          countryDemoData = await prisma.countryDemoData.findUnique({
+            where: { id: countryUuid },
+          });
+        } else {
+          countryDemoData = await prisma.countryDemoData.findFirst({
+            where: { countryId: countryId },
+          });
+        }
+
+        if (countryDemoData && countryDemoData.demoData) {
+          const demoData = countryDemoData.demoData as unknown as DemoData;
+          
+          // Parse the structured data to get analysis format
+          analysis = JSON.parse(demoData.structuredData);
+          title = demoData.title;
+          pinsCount = demoData.pins_count;
+          shouldSkipProcessing = true;
+          
+          console.log(`Successfully loaded demo data for country ${countryUuid || countryId}`);
+        } else {
+          console.log(`No demo data found for country ${countryUuid || countryId}, falling back to AI`);
+          analysis = await extractLocationAndClassify(description, req);
+          title =
+            analysis && analysis.length > 0 && analysis[0].title
+              ? analysis[0].title
+              : "";
+          pinsCount = analysis.filter(
+            (a) => a.classification !== "Not Pinned"
+          ).length;
+        }
       } catch (error) {
-        console.error("Error parsing demo data, falling back to AI:", error);
+        console.error(`Error fetching demo data for country ${countryId}, falling back to AI:`, error);
         analysis = await extractLocationAndClassify(description, req);
         title =
           analysis && analysis.length > 0 && analysis[0].title
@@ -401,38 +461,18 @@ const processContentAnalysisAsync = async (
     let pinsCreated = 0;
 
     // Process each analysis object for pin creation
-    if (shouldSkipProcessing && isJapanDemoTrip && isFirstContent) {
-      // Use hardcoded pin data for demo
-      const demoData = DEMO_PIN_DATA;
-      for (const pinData of demoData.pins) {
-        // The places should already be in place cache, just create the pins
-        const pin = await createPin({
-          name: pinData.title ?? "",
-          category: pinData.classification ?? "",
-          contentId: contentId,
-          placeCacheId: pinData.place.id, // Use the existing place cache ID
-          coordinates: { lat: pinData.place.lat, lng: pinData.place.lng },
-          description: pinData.description ?? "",
-        });
-
-        if (pin) {
-          pinsCreated += 1;
-        }
-
-        req.logger?.info(
-          `✅ Created demo pin: ${pinData.title} for content ${contentId}`
-        );
-      }
-    } else {
-      // Original pin creation logic
-      await Promise.all(
-        analysis.map(async (analysis) => {
+    // Process pin creation - use same logic for both demo and normal content
+    await Promise.all(
+      analysis.map(async (analysis) => {
+        try {
           if (analysis.classification === "Not Pinned") {
             return;
           }
 
           const full_loc =
             (analysis.name ?? "") + " " + (analysis.location ?? "");
+
+          console.log(`Processing pin for: ${full_loc} (${analysis.classification})`);
 
           // Step 1: Get Place ID
           const placeId = await getPlaceId(full_loc, req);
@@ -515,12 +555,16 @@ const processContentAnalysisAsync = async (
           req.logger?.info(
             `Created Pin - ${pin.id} with content_id - ${contentId} and place_id - ${placeCacheId}`
           );
-        })
-      );
-    }
+        } catch (error) {
+          console.error(`Error creating pin for ${analysis.name || 'unknown place'}:`, error);
+          req.logger?.error(`Failed to create pin for ${analysis.name}:`, error);
+          // Continue processing other pins even if one fails
+        }
+      })
+    );
 
-    // If this is a Japan demo trip and at least one pin was created, update user metadata
-    if (isJapanDemoTrip && pinsCreated > 0) {
+    // If this is a demo trip and at least one pin was created, update user metadata
+    if (isDemoTrip && pinsCreated > 0) {
       try {
         // Get current user metadata
         const user = await prisma.user.findUnique({
@@ -1065,33 +1109,12 @@ app.post("/api/signin-with-apple", async (req, res) => {
 
     const trips = await getTripsByUserId(user.id);
     let currentTripId = trips[0]?.id;
-    let defaultTrips: any[] = [];
-
-    // Create default Japan trip for new users
-    if (isNewUser || trips.length === 0) {
-      const { startDate, endDate } = getDummyStartAndEndDate();
-      const currentYear = new Date().getFullYear();
-      const firstName = name ? name.split(" ")[0] : "My";
-
-      // Create Japan trip (will be the current trip)
-      const japanTrip = await createTripAndTripUser(
-        user.id,
-        `Japan ${currentYear}`,
-        startDate,
-        endDate,
-        `My dream trip to Japan in ${currentYear}.`,
-        { type: "japan_demo", isDemo: true, tutorial_completed: false }
-      );
-
-      defaultTrips = [japanTrip];
-      currentTripId = japanTrip.id; // Set Japan trip as current
-    }
 
     res.status(200).json({
       ...user,
       metadata: (user as any).metadata,
       currentTripId: currentTripId,
-      defaultTrips: defaultTrips.length > 0 ? defaultTrips : trips,
+      trips: trips,
     });
   } catch (error) {
     console.error("Error in apple sign-in:", error);
@@ -1127,33 +1150,12 @@ app.post("/api/signin-with-google", async (req, res) => {
 
     const trips = await getTripsByUserId(user.id);
     let currentTripId = trips[0]?.id;
-    let defaultTrips: any[] = [];
-
-    // Create default Japan trip for new users
-    if (isNewUser || trips.length === 0) {
-      const { startDate, endDate } = getDummyStartAndEndDate();
-      const currentYear = new Date().getFullYear();
-      const firstName = name ? name.split(" ")[0] : "My";
-
-      // Create Japan trip (will be the current trip)
-      const japanTrip = await createTripAndTripUser(
-        user.id,
-        `${firstName}'s trip to Japan ${currentYear}`,
-        startDate,
-        endDate,
-        `My dream trip to Japan in ${currentYear}.`,
-        { type: "japan_demo", isDemo: true, tutorial_completed: false }
-      );
-
-      defaultTrips = [japanTrip];
-      currentTripId = japanTrip.id; // Set Japan trip as current
-    }
 
     res.status(200).json({
       ...user,
       metadata: (user as any).metadata,
       currentTripId: currentTripId,
-      defaultTrips: defaultTrips.length > 0 ? defaultTrips : trips,
+      trips: trips,
     });
   } catch (error) {
     console.error("Error in get-or-create-user:", error);
@@ -3772,14 +3774,22 @@ app.get(
   }
 );
 
-// DEBUG: API to get content analysis data for hardcoding demo pins
-app.get(
-  "/api/debug/content-analysis/:contentId",
+// DEBUG: API to create and store country demo data from Instagram URL
+app.post(
+  "/api/debug/content-analysis",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const { contentId } = req.params;
+      const { contentId, country } = req.body;
 
-      // Get content with all related data
+      // Validate required fields
+      if (!contentId || !country) {
+        res.status(400).json({ 
+          error: "Missing required fields: contentId, country" 
+        });
+        return;
+      }
+
+      // Get existing content with all related data
       const content = await prisma.content.findUnique({
         where: { id: contentId },
         include: {
@@ -3794,12 +3804,37 @@ app.get(
       });
 
       if (!content) {
-        res.status(404).json({ error: "Content not found" });
+        res.status(404).json({ error: "Content not found with provided contentId" });
         return;
       }
 
-      // Format the response with all data needed for hardcoding
-      const analysisData = {
+      // Validate that content URL is Instagram URL
+      if (!content.url.includes('instagram.com')) {
+        res.status(400).json({ 
+          error: "Content URL must be an Instagram URL" 
+        });
+        return;
+      }
+
+      // Check for duplicate URLs in existing demo data for different countries
+      const existingDemoData = await prisma.countryDemoData.findFirst({
+        where: { 
+          url: content.url,
+          countryName: { not: country }
+        }
+      });
+
+      if (existingDemoData) {
+        res.status(409).json({
+          error: `URL already exists for country: ${existingDemoData.countryName}. Cannot create demo data for ${country} with the same URL.`,
+          existingCountry: existingDemoData.countryName,
+          existingCountryId: existingDemoData.countryId
+        });
+        return;
+      }
+
+      // Format the demo data with all needed information
+      const demoData = {
         contentId: content.id,
         url: content.url,
         title: content.title,
@@ -3842,12 +3877,245 @@ app.get(
         },
       };
 
+      // Country coordinates and flags lookup
+      const countryData: { [key: string]: { lat: number; lng: number; flag: string } } = {
+        "France": { lat: 46.2276, lng: 2.2137, flag: "🇫🇷" },
+        "Spain": { lat: 40.4637, lng: -3.7492, flag: "🇪🇸" },
+        "United States": { lat: 37.0902, lng: -95.7129, flag: "🇺🇸" },
+        "China": { lat: 35.8617, lng: 104.1954, flag: "🇨🇳" },
+        "Italy": { lat: 41.8719, lng: 12.5674, flag: "🇮🇹" },
+        "Turkey": { lat: 38.9637, lng: 35.2433, flag: "🇹🇷" },
+        "Mexico": { lat: 23.6345, lng: -102.5528, flag: "🇲🇽" },
+        "Thailand": { lat: 15.8700, lng: 100.9925, flag: "🇹🇭" },
+        "Germany": { lat: 51.1657, lng: 10.4515, flag: "🇩🇪" },
+        "United Kingdom": { lat: 55.3781, lng: -3.4360, flag: "🇬🇧" },
+        "Japan": { lat: 36.2048, lng: 138.2529, flag: "🇯🇵" },
+        "Austria": { lat: 47.5162, lng: 14.5501, flag: "🇦🇹" },
+        "Greece": { lat: 39.0742, lng: 21.8243, flag: "🇬🇷" },
+        "Malaysia": { lat: 4.2105, lng: 101.9758, flag: "🇲🇾" },
+        "Russia": { lat: 61.5240, lng: 105.3188, flag: "🇷🇺" },
+        "Canada": { lat: 56.1304, lng: -106.3468, flag: "🇨🇦" },
+        "Poland": { lat: 51.9194, lng: 19.1451, flag: "🇵🇱" },
+        "Netherlands": { lat: 52.1326, lng: 5.2913, flag: "🇳🇱" },
+        "Ukraine": { lat: 48.3794, lng: 31.1656, flag: "🇺🇦" },
+        "Hungary": { lat: 47.1625, lng: 19.5033, flag: "🇭🇺" },
+        "Portugal": { lat: 39.3999, lng: -8.2245, flag: "🇵🇹" },
+        "Saudi Arabia": { lat: 23.8859, lng: 45.0792, flag: "🇸🇦" },
+        "Croatia": { lat: 45.1000, lng: 15.2000, flag: "🇭🇷" },
+        "Egypt": { lat: 26.0975, lng: 31.1394, flag: "🇪🇬" },
+        "Morocco": { lat: 31.7917, lng: -7.0926, flag: "🇲🇦" },
+        "Czech Republic": { lat: 49.8175, lng: 15.4730, flag: "🇨🇿" },
+        "South Korea": { lat: 35.9078, lng: 127.7669, flag: "🇰🇷" },
+        "Indonesia": { lat: -0.7893, lng: 113.9213, flag: "🇮🇩" },
+        "India": { lat: 20.5937, lng: 78.9629, flag: "🇮🇳" },
+        "Vietnam": { lat: 14.0583, lng: 108.2772, flag: "🇻🇳" },
+        "Chile": { lat: -35.6751, lng: -71.5430, flag: "🇨🇱" },
+        "Singapore": { lat: 1.3521, lng: 103.8198, flag: "🇸🇬" },
+        "Philippines": { lat: 12.8797, lng: 121.7740, flag: "🇵🇭" },
+        "South Africa": { lat: -30.5595, lng: 22.9375, flag: "🇿🇦" },
+        "Argentina": { lat: -38.4161, lng: -63.6167, flag: "🇦🇷" },
+        "Sweden": { lat: 60.1282, lng: 18.6435, flag: "🇸🇪" },
+        "Belgium": { lat: 50.5039, lng: 4.4699, flag: "🇧🇪" },
+        "Norway": { lat: 60.4720, lng: 8.4689, flag: "🇳🇴" },
+        "Ireland": { lat: 53.4129, lng: -8.2439, flag: "🇮🇪" },
+        "Jordan": { lat: 30.5852, lng: 36.2384, flag: "🇯🇴" },
+        "Australia": { lat: -25.2744, lng: 133.7751, flag: "🇦🇺" },
+        "Israel": { lat: 31.0461, lng: 34.8516, flag: "🇮🇱" },
+        "United Arab Emirates": { lat: 23.4241, lng: 53.8478, flag: "🇦🇪" },
+        "Denmark": { lat: 56.2639, lng: 9.5018, flag: "🇩🇰" },
+        "Finland": { lat: 61.9241, lng: 25.7482, flag: "🇫🇮" },
+        "Bulgaria": { lat: 42.7339, lng: 25.4858, flag: "🇧🇬" },
+        "Tunisia": { lat: 33.8869, lng: 9.5375, flag: "🇹🇳" },
+        "New Zealand": { lat: -40.9006, lng: 174.8860, flag: "🇳🇿" },
+        "Brazil": { lat: -14.2350, lng: -51.9253, flag: "🇧🇷" },
+        "Switzerland": { lat: 46.8182, lng: 8.2275, flag: "🇨🇭" }
+      };
+
+      // Get country coordinates and flag
+      const countryInfo = countryData[country];
+      
+      if (!countryInfo) {
+        res.status(400).json({
+          error: `Unsupported country: ${country}. Please use a supported country name.`
+        });
+        return;
+      }
+
+      // Generate a country ID from the country name (simple approach)
+      const countryId = country.substring(0, 2).toUpperCase();
+
+      // Store or update country demo data
+      const countryDemoData = await prisma.countryDemoData.upsert({
+        where: { countryName: country },
+        update: {
+          countryId: countryId,
+          url: content.url,
+          demoData,
+          lat: countryInfo.lat,
+          lng: countryInfo.lng,
+          flag: countryInfo.flag,
+        },
+        create: {
+          countryName: country,
+          countryId: countryId,
+          url: content.url,
+          demoData,
+          lat: countryInfo.lat,
+          lng: countryInfo.lng,
+          flag: countryInfo.flag,
+        },
+      });
+
       res.status(200).json({
         success: true,
-        data: analysisData,
+        message: "Country demo data stored successfully",
+        data: {
+          countryUuid: countryDemoData.id,
+          id: countryDemoData.id,
+          countryName: countryDemoData.countryName,
+          countryId: countryDemoData.countryId,
+          url: countryDemoData.url,
+        },
       });
     } catch (error) {
-      console.error("Error fetching content analysis data:", error);
+      console.error("Error storing country demo data:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// API to get all available countries with demo data
+app.get(
+  "/api/countries/demo",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const countries = await prisma.countryDemoData.findMany({
+        select: {
+          id: true, // Include the UUID
+          countryName: true,
+          countryId: true,
+          url: true,
+          createdAt: true,
+          demoData: true,
+          lat: true,
+          lng: true,
+          flag: true,
+        },
+        orderBy: {
+          countryName: 'asc',
+        },
+      });
+
+      // Format for country selection page
+      const formattedCountries = countries.map((country: any) => ({
+        name: country.countryName,
+        id: country.id, // Use the UUID as id
+        countryId: country.countryId, // Also include countryId separately
+        url: country.url,
+        hasDemo: true,
+        demoData: country.demoData,
+        lat: country.lat,
+        lng: country.lng,
+        flag: country.flag,
+      }));
+
+      res.status(200).json({
+        success: true,
+        countries: formattedCountries,
+      });
+    } catch (error) {
+      console.error("Error fetching countries with demo data:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// API to create demo trip for a country
+app.post(
+  "/api/demo-trip/create",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const currentUser = req.currentUser;
+      if (!currentUser) {
+        res.status(401).json({ error: "User not authenticated" });
+        return;
+      }
+
+      const { countryId, countryName, countryUuid } = req.body;
+      
+      if (!countryUuid && (!countryId || !countryName)) {
+        res.status(400).json({ 
+          error: "Missing required fields: either countryUuid OR (countryId and countryName)" 
+        });
+        return;
+      }
+
+      // Check if demo data exists for this country
+      let countryDemoData;
+      if (countryUuid) {
+        // Use UUID to find the country data
+        countryDemoData = await prisma.countryDemoData.findUnique({
+          where: { id: countryUuid },
+        });
+      } else {
+        // Fallback to countryId lookup
+        countryDemoData = await prisma.countryDemoData.findFirst({
+          where: { countryId: countryId },
+        });
+      }
+
+      if (!countryDemoData) {
+        res.status(404).json({ 
+          error: `No demo data available for country: ${countryUuid ? 'with UUID ' + countryUuid : countryName}` 
+        });
+        return;
+      }
+
+      const { startDate, endDate } = getDummyStartAndEndDate();
+      const currentYear = new Date().getFullYear();
+      const firstName = currentUser.name ? currentUser.name.split(" ")[0] : "My";
+
+      // Use data from the found country record
+      const finalCountryName = countryDemoData.countryName;
+      const finalCountryId = countryDemoData.countryId;
+
+      // Create demo trip with country-specific metadata including UUID
+      const demoTrip = await createTripAndTripUser(
+        currentUser.id,
+        `${firstName}'s trip to ${finalCountryName} ${currentYear}`,
+        startDate,
+        endDate,
+        `My dream trip to ${finalCountryName}`,
+        { 
+          type: "demo", 
+          countryUuid: countryDemoData.id,
+          countryId: finalCountryId,
+          countryName: finalCountryName,
+          isDemo: true, 
+          tutorial_completed: false 
+        }
+      );
+
+      res.status(201).json({
+        success: true,
+        message: "Demo trip created successfully",
+        trip_id: demoTrip.id,
+        demoTripURL: countryDemoData.url,
+        countryUuid: countryDemoData.id,
+        trip: {
+          id: demoTrip.id,
+          name: demoTrip.name,
+          description: demoTrip.description,
+          startDate: demoTrip.startDate,
+          endDate: demoTrip.endDate,
+          countryUuid: countryDemoData.id,
+          countryId: finalCountryId,
+          countryName: finalCountryName,
+        }
+      });
+    } catch (error) {
+      console.error("Error creating demo trip:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   }
