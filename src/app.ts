@@ -153,6 +153,15 @@ const UserSchema = z.object({
   email: z.string(),
   phoneNumber: z.string(),
   firebaseId: z.string(),
+  metadata: z
+    .object({
+      new_tour_flow_user: z.boolean().optional(),
+      has_local_trip: z.boolean().optional(),
+      has_completed_first_tour: z.boolean().optional(),
+      has_completed_second_tour: z.boolean().optional(),
+      has_completed_third_tour: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 const ContentSchema = z.object({
@@ -392,10 +401,7 @@ const processContentAnalysisAsync = async (
     let pinsCreated = 0;
 
     // Process each analysis object for pin creation
-    if (
-      shouldSkipProcessing &&
-      isJapanDemoTrip &&
-      isFirstContent ) {
+    if (shouldSkipProcessing && isJapanDemoTrip && isFirstContent) {
       // Use hardcoded pin data for demo
       const demoData = DEMO_PIN_DATA;
       for (const pinData of demoData.pins) {

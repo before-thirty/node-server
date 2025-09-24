@@ -48,13 +48,13 @@ export const updateContent = async (
 // Update content status
 export const updateContentStatus = async (
   contentId: string,
-  status: 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  status: "PROCESSING" | "COMPLETED" | "FAILED"
 ) => {
   return await prisma.content.update({
     where: { id: contentId },
     data: {
       status: status,
-      updatedAt: new Date()
+      updatedAt: new Date(),
     },
   });
 };
@@ -253,6 +253,7 @@ export interface UserModel {
   phoneNumber: string;
   firebaseId: string;
   lastOpened?: Date | null;
+  metadata?: any;
 }
 
 export const getUserByFirebaseId = async (
@@ -268,11 +269,14 @@ export const getUserByFirebaseId = async (
       phoneNumber: true,
       firebaseId: true,
       lastOpened: true,
+      metadata: true,
     },
   });
 };
 
-export const getUserById = async (userId: string): Promise<UserModel | null> => {
+export const getUserById = async (
+  userId: string
+): Promise<UserModel | null> => {
   return await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -1518,7 +1522,7 @@ export const getContentSummarySinceLastLogin = async (
   if (!lastLoginDate) {
     return {
       completedSummary: [],
-      processingItems: []
+      processingItems: [],
     };
   }
 
@@ -1528,15 +1532,15 @@ export const getContentSummarySinceLastLogin = async (
   // Get all trips the user is part of
   const userTrips = await prisma.tripUser.findMany({
     where: { userId: currentUserId },
-    select: { tripId: true }
+    select: { tripId: true },
   });
 
-  const tripIds = userTrips.map(trip => trip.tripId);
+  const tripIds = userTrips.map((trip) => trip.tripId);
 
   if (tripIds.length === 0) {
     return {
       completedSummary: [],
-      processingItems: []
+      processingItems: [],
     };
   }
 
@@ -1545,14 +1549,14 @@ export const getContentSummarySinceLastLogin = async (
     where: {
       tripId: { in: tripIds },
       createdAt: { gt: lastLoginDate },
-      status: { in: ['COMPLETED', 'PROCESSING'] }, // Include both completed and processing content
+      status: { in: ["COMPLETED", "PROCESSING"] }, // Include both completed and processing content
       userId: {
-        notIn: [...blockedUserIds] // Exclude blocked users and current user's own content
+        notIn: [...blockedUserIds], // Exclude blocked users and current user's own content
       },
       isHidden: false,
       user: {
-        isBlocked: false
-      }
+        isBlocked: false,
+      },
     },
     select: {
       id: true,
@@ -1564,20 +1568,27 @@ export const getContentSummarySinceLastLogin = async (
       trip: {
         select: {
           id: true,
-          name: true
-        }
-      }
-    }
+          name: true,
+        },
+      },
+    },
   });
 
   // Separate completed and processing content
-  const completedContent = newContent.filter(content => content.status === 'COMPLETED');
-  const processingContent = newContent.filter(content => content.status === 'PROCESSING');
+  const completedContent = newContent.filter(
+    (content) => content.status === "COMPLETED"
+  );
+  const processingContent = newContent.filter(
+    (content) => content.status === "PROCESSING"
+  );
 
   // Group completed content by trip and sum pins
-  const completedTripSummary = new Map<string, { tripId: string; tripName: string; totalPins: number }>();
+  const completedTripSummary = new Map<
+    string,
+    { tripId: string; tripName: string; totalPins: number }
+  >();
 
-  completedContent.forEach(content => {
+  completedContent.forEach((content) => {
     const tripId = content.tripId;
     const tripName = content.trip.name;
     const pinsCount = content.pins_count || 0;
@@ -1589,26 +1600,28 @@ export const getContentSummarySinceLastLogin = async (
       completedTripSummary.set(tripId, {
         tripId,
         tripName,
-        totalPins: pinsCount
+        totalPins: pinsCount,
       });
     }
   });
 
   // Process individual processing content items for notifications
-  const processingItems = processingContent.map(content => ({
+  const processingItems = processingContent.map((content) => ({
     contentId: content.id,
     tripId: content.tripId,
     tripName: content.trip.name,
     title: content.title,
     createdAt: content.createdAt,
-    status: 'PROCESSING' as const
+    status: "PROCESSING" as const,
   }));
 
   // Convert completed summary to array and filter out trips with 0 pins
-  const completedSummary = Array.from(completedTripSummary.values()).filter(summary => summary.totalPins > 0);
+  const completedSummary = Array.from(completedTripSummary.values()).filter(
+    (summary) => summary.totalPins > 0
+  );
 
   return {
     completedSummary,
-    processingItems
+    processingItems,
   };
 };
