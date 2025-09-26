@@ -134,6 +134,7 @@ model PlaceCache {
   regularOpeningHours Json?
   userRatingCount     Int?
   websiteUri          String?
+  googleMapsLink      String?
   images              String[]
   utcOffsetMinutes    Int?
   pins                Pin[]

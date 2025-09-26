@@ -20,6 +20,7 @@ import {
   clearAllSessions,
   getSessionForUser,
   getPlaceDetailsFromId,
+  getGoogleMapsUriOnly,
 } from "./helpers/googlemaps";
 import { z } from "zod";
 
@@ -520,6 +521,7 @@ const processContentAnalysisAsync = async (
               rating: placeDetails.rating ?? null,
               userRatingCount: placeDetails.userRatingCount ?? null,
               websiteUri: placeDetails.websiteUri ?? null,
+              googleMapsLink: placeDetails.googleMapsUri ?? null,
               currentOpeningHours: placeDetails.currentOpeningHours,
               regularOpeningHours: placeDetails.regularOpeningHours,
               lat: coordinates.lat,
@@ -2559,6 +2561,7 @@ app.post(
           rating: placeDetails.rating ?? null,
           userRatingCount: placeDetails.userRatingCount ?? null,
           websiteUri: placeDetails.websiteUri ?? null,
+          googleMapsLink: placeDetails.googleMapsUri ?? null,
           currentOpeningHours: placeDetails.currentOpeningHours,
           regularOpeningHours: placeDetails.regularOpeningHours,
           lat: coordinates.lat,
@@ -2864,6 +2867,7 @@ app.post(
                 rating: placeDetails.rating ?? null,
                 userRatingCount: placeDetails.userRatingCount ?? null,
                 websiteUri: placeDetails.websiteUri ?? null,
+                googleMapsLink: placeDetails.googleMapsUri ?? null,
                 currentOpeningHours: placeDetails.currentOpeningHours,
                 regularOpeningHours: placeDetails.regularOpeningHours,
                 lat: coordinates.lat,
@@ -4117,6 +4121,115 @@ app.post(
     } catch (error) {
       console.error("Error creating demo trip:", error);
       res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+// API to backfill Google Maps links for existing places
+app.post(
+  "/api/backfill-google-maps-links",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      console.log("🔗 Starting Google Maps links backfill for latest 1000 places...");
+      
+      // Get latest 1000 places that don't have Google Maps links
+      const placesToUpdate = await prisma.placeCache.findMany({
+        where: {
+          googleMapsLink: null, // Only get places without Google Maps links
+        },
+        orderBy: {
+          createdAt: 'desc', // Latest first
+        },
+        take: 1000,
+        select: {
+          id: true,
+          placeId: true,
+          name: true,
+          createdAt: true,
+        },
+      });
+
+      if (placesToUpdate.length === 0) {
+        res.status(200).json({
+          success: true,
+          message: "No places found that need Google Maps links",
+          updated: 0,
+          total: 0,
+        });
+        return;
+      }
+
+      console.log(`📊 Found ${placesToUpdate.length} places to update`);
+
+      let successCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+
+      // Process places in batches to avoid rate limiting
+      const batchSize = 50;
+      const delay = 10000; // 2000ms (2 seconds) delay between batches
+
+      for (let i = 0; i < placesToUpdate.length; i += batchSize) {
+        const batch = placesToUpdate.slice(i, i + batchSize);
+        
+        console.log(`🔄 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(placesToUpdate.length / batchSize)} (${batch.length} places)`);
+
+        // Process batch in parallel
+        await Promise.allSettled(
+          batch.map(async (place) => {
+            try {
+              // Get only Google Maps URI to minimize API costs
+              const googleMapsUri = await getGoogleMapsUriOnly(place.placeId, req);
+              
+              if (googleMapsUri) {
+                // Update the place cache with the Google Maps link
+                await prisma.placeCache.update({
+                  where: { id: place.id },
+                  data: {
+                    googleMapsLink: googleMapsUri,
+                    lastCached: new Date(), // Update the cache timestamp
+                  },
+                });
+                
+                console.log(`✅ Updated ${place.name}: ${googleMapsUri}`);
+                successCount++;
+              } else {
+                console.log(`⚠️ No Google Maps URI found for ${place.name}`);
+                errorCount++;
+                errors.push(`No Google Maps URI found for ${place.name} (ID: ${place.id})`);
+              }
+            } catch (error) {
+              console.error(`❌ Failed to update ${place.name}:`, error);
+              errorCount++;
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              errors.push(`Failed to update ${place.name}: ${errorMessage}`);
+            }
+          })
+        );
+
+        // Add delay between batches to respect rate limits
+        if (i + batchSize < placesToUpdate.length) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+
+      console.log(`🎉 Backfill completed: ${successCount} successful, ${errorCount} errors`);
+
+      res.status(200).json({
+        success: true,
+        message: "Google Maps links backfill completed",
+        total: placesToUpdate.length,
+        updated: successCount,
+        errors: errorCount,
+        errorDetails: errors.slice(0, 10), // Return first 10 errors for debugging
+      });
+    } catch (error) {
+      console.error("Error during Google Maps links backfill:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ 
+        error: "Internal server error during backfill",
+        message: errorMessage 
+      });
     }
   }
 );

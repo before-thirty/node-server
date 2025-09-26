@@ -15,6 +15,7 @@ interface PlaceDetails {
   rating?: number;
   userRatingCount?: number;
   websiteUri?: string;
+  googleMapsUri?: string;
   currentOpeningHours?: any;
   regularOpeningHours?: any;
   images: string[];
@@ -208,6 +209,7 @@ export async function getFullPlaceDetails(
       rating: place.rating,
       userRatingCount: place.userRatingCount,
       websiteUri: place.websiteUri,
+      googleMapsUri: place.googleMapsUri,
       currentOpeningHours: place.currentOpeningHours,
       regularOpeningHours: place.regularOpeningHours,
       images: photoUrls ?? [],
@@ -297,6 +299,7 @@ export async function getPlaceDetailsFromId(
       rating: place.rating,
       userRatingCount: place.userRatingCount,
       websiteUri: place.websiteUri,
+      googleMapsUri: place.googleMapsUri,
       currentOpeningHours: place.currentOpeningHours,
       regularOpeningHours: place.regularOpeningHours,
       images: photoUrls ?? [],
@@ -316,6 +319,41 @@ export async function getPlaceDetailsFromId(
   } catch (error) {
     req.logger?.error("Error calling Places API for place details:", error);
     throw new Error("Failed to get place details from placeId.");
+  }
+}
+
+// Lightweight function to only get Google Maps URI (for backfill purposes)
+export async function getGoogleMapsUriOnly(
+  placeId: string,
+  req: Request
+): Promise<string | null> {
+  try {
+    const url = `https://places.googleapis.com/v1/places/${placeId}`;
+
+    const config: any = {
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask": "googleMapsUri", // Only fetch Google Maps URI to minimize costs
+      },
+    };
+
+    console.log(`Fetching Google Maps URI for place: ${placeId}`);
+
+    const response = await axios.get(url, config);
+    const place = response.data;
+
+    if (!place) {
+      console.log(`No place found for placeId: ${placeId}`);
+      return null;
+    }
+
+    console.log("Google Maps URI:", place.googleMapsUri);
+    return place.googleMapsUri || null;
+  } catch (error) {
+    req.logger?.error("Error calling Places API for Google Maps URI:", error);
+    console.error(`Failed to get Google Maps URI for place ${placeId}:`, error);
+    return null;
   }
 }
 

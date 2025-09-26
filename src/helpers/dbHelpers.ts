@@ -153,6 +153,7 @@ export const createPlaceCache = async (placeDetails: {
   rating: number | null;
   userRatingCount: number | null;
   websiteUri: string | null;
+  googleMapsLink: string | null;
   currentOpeningHours: any | null;
   regularOpeningHours: any | null;
   lat: number;
@@ -167,6 +168,7 @@ export const createPlaceCache = async (placeDetails: {
       rating: placeDetails.rating,
       userRatingCount: placeDetails.userRatingCount,
       websiteUri: placeDetails.websiteUri,
+      googleMapsLink: placeDetails.googleMapsLink,
       currentOpeningHours: placeDetails.currentOpeningHours,
       regularOpeningHours: placeDetails.regularOpeningHours,
       lat: placeDetails.lat,
@@ -979,6 +981,7 @@ export const getTripContentData = async (
     regularOpeningHours: place.regularOpeningHours,
     userRatingCount: place.userRatingCount,
     websiteUri: place.websiteUri,
+    googleMapsLink: place.googleMapsLink,
     images: place.images,
     utcOffsetMinutes: place.utcOffsetMinutes,
     mustDo: place.userPlaceMustDos.length > 0,
