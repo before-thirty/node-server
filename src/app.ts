@@ -21,6 +21,7 @@ import {
   getSessionForUser,
   getPlaceDetailsFromId,
   getGoogleMapsUriOnly,
+  fetchGoogleMapsImage,
 } from "./helpers/googlemaps";
 import { z } from "zod";
 
@@ -4140,7 +4141,7 @@ app.post(
         orderBy: {
           createdAt: 'desc', // Latest first
         },
-        take: 1000,
+        take: 10,
         select: {
           id: true,
           placeId: true,
@@ -4166,7 +4167,7 @@ app.post(
       const errors: string[] = [];
 
       // Process places in batches to avoid rate limiting
-      const batchSize = 50;
+      const batchSize = 10;
       const delay = 10000; // 2000ms (2 seconds) delay between batches
 
       for (let i = 0; i < placesToUpdate.length; i += batchSize) {
@@ -4182,16 +4183,32 @@ app.post(
               const googleMapsUri = await getGoogleMapsUriOnly(place.placeId, req);
               
               if (googleMapsUri) {
-                // Update the place cache with the Google Maps link
+                // Fetch Google Maps image from the URI
+                console.log(`🖼️ Fetching Google Maps image for ${place.name}`);
+                const googleMapsImage = await fetchGoogleMapsImage(googleMapsUri);
+                
+                // Prepare update data
+                const updateData: any = {
+                  googleMapsLink: googleMapsUri,
+                  lastCached: new Date(), // Update the cache timestamp
+                };
+                
+                // Always update images array - either with Google Maps image or empty (no backup mode)
+                if (googleMapsImage) {
+                  console.log(`✅ Found Google Maps image for ${place.name}: ${googleMapsImage}`);
+                  updateData.images = [googleMapsImage]; // Replace existing images with the Google Maps image
+                } else {
+                  console.log(`⚠️ No image found for ${place.name} Google Maps link - clearing images array`);
+                  updateData.images = []; // Clear existing images since we only want Google Maps metadata images
+                }
+                
+                // Update the place cache with the Google Maps link and image
                 await prisma.placeCache.update({
                   where: { id: place.id },
-                  data: {
-                    googleMapsLink: googleMapsUri,
-                    lastCached: new Date(), // Update the cache timestamp
-                  },
+                  data: updateData,
                 });
                 
-                console.log(`✅ Updated ${place.name}: ${googleMapsUri}`);
+                console.log(`✅ Updated ${place.name}: ${googleMapsUri}${googleMapsImage ? ' with image' : ''}`);
                 successCount++;
               } else {
                 console.log(`⚠️ No Google Maps URI found for ${place.name}`);

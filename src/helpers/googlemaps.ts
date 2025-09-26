@@ -1,12 +1,12 @@
 import axios from "axios";
 import dotenv from "dotenv";
 import express, { Request, Response } from "express";
+import { parse } from 'node-html-parser';
 
 dotenv.config();
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 const GOOGLE_MAPS_IMAGE_API = "https://places.googleapis.com/v1";
-// https://places.googleapis.com/v1/NAME/media?key=API_KEY&PARAMETERS
 
 // Updated PlaceDetails interface
 interface PlaceDetails {
@@ -191,15 +191,45 @@ export async function getFullPlaceDetails(
     // Log Google Maps URI and Links
     console.log("Google Maps URI:", place.googleMapsUri);
     console.log("Google Maps Links:", place.googleMapsLinks);
-    // Extract photos field
-    const photos = place.photos || [];
+    
+    // Extract image from Google Maps URI metadata with backup to photos API
     let photoUrls: string[] = [];
-    for (const photo of photos) {
-      if (photo.name) {
-        const imageUrl = `${GOOGLE_MAPS_IMAGE_API}/${photo.name}/media?maxWidthPx=800&skipHttpRedirect=true&key=${GOOGLE_MAPS_API_KEY}`;
-        const response = await axios.get(imageUrl);
-        photoUrls.push(response.data.photoUri);
-        if (response.status === 200) break;
+    if (place.googleMapsUri) {
+      const googleMapsImage = await fetchGoogleMapsImage(place.googleMapsUri);
+      if (googleMapsImage) {
+        photoUrls.push(googleMapsImage);
+      } else {
+        console.log('🔄 No image from metadata, falling back to photos API');
+        // Fallback to Google Maps Image API
+        const photos = place.photos || [];
+        for (const photo of photos) {
+          if (photo.name) {
+            try {
+              const imageUrl = `${GOOGLE_MAPS_IMAGE_API}/${photo.name}/media?maxWidthPx=800&skipHttpRedirect=true&key=${GOOGLE_MAPS_API_KEY}`;
+              const response = await axios.get(imageUrl);
+              photoUrls.push(response.data.photoUri);
+              if (response.status === 200) break;
+            } catch (error) {
+              console.error('Failed to get photo from Images API:', error);
+            }
+          }
+        }
+      }
+    } else {
+      // No Google Maps URI, use photos API directly
+      console.log('🔄 No Google Maps URI, using photos API directly');
+      const photos = place.photos || [];
+      for (const photo of photos) {
+        if (photo.name) {
+          try {
+            const imageUrl = `${GOOGLE_MAPS_IMAGE_API}/${photo.name}/media?maxWidthPx=800&skipHttpRedirect=true&key=${GOOGLE_MAPS_API_KEY}`;
+            const response = await axios.get(imageUrl);
+            photoUrls.push(response.data.photoUri);
+            if (response.status === 200) break;
+          } catch (error) {
+            console.error('Failed to get photo from Images API:', error);
+          }
+        }
       }
     }
     // Construct the PlaceDetails object
@@ -280,15 +310,44 @@ export async function getPlaceDetailsFromId(
     console.log("Google Maps URI:", place.googleMapsUri);
     console.log("Google Maps Links:", place.googleMapsLinks);
 
-    // Extract photos field
-    const photos = place.photos || [];
+    // Extract image from Google Maps URI metadata with backup to photos API
     let photoUrls: string[] = [];
-    for (const photo of photos) {
-      if (photo.name) {
-        const imageUrl = `${GOOGLE_MAPS_IMAGE_API}/${photo.name}/media?maxWidthPx=800&skipHttpRedirect=true&key=${GOOGLE_MAPS_API_KEY}`;
-        const response = await axios.get(imageUrl);
-        photoUrls.push(response.data.photoUri);
-        if (response.status === 200) break;
+    if (place.googleMapsUri) {
+      const googleMapsImage = await fetchGoogleMapsImage(place.googleMapsUri);
+      if (googleMapsImage) {
+        photoUrls.push(googleMapsImage);
+      } else {
+        console.log('🔄 No image from metadata, falling back to photos API');
+        // Fallback to Google Maps Image API
+        const photos = place.photos || [];
+        for (const photo of photos) {
+          if (photo.name) {
+            try {
+              const imageUrl = `${GOOGLE_MAPS_IMAGE_API}/${photo.name}/media?maxWidthPx=800&skipHttpRedirect=true&key=${GOOGLE_MAPS_API_KEY}`;
+              const response = await axios.get(imageUrl);
+              photoUrls.push(response.data.photoUri);
+              if (response.status === 200) break;
+            } catch (error) {
+              console.error('Failed to get photo from Images API:', error);
+            }
+          }
+        }
+      }
+    } else {
+      // No Google Maps URI, use photos API directly
+      console.log('🔄 No Google Maps URI, using photos API directly');
+      const photos = place.photos || [];
+      for (const photo of photos) {
+        if (photo.name) {
+          try {
+            const imageUrl = `${GOOGLE_MAPS_IMAGE_API}/${photo.name}/media?maxWidthPx=800&skipHttpRedirect=true&key=${GOOGLE_MAPS_API_KEY}`;
+            const response = await axios.get(imageUrl);
+            photoUrls.push(response.data.photoUri);
+            if (response.status === 200) break;
+          } catch (error) {
+            console.error('Failed to get photo from Images API:', error);
+          }
+        }
       }
     }
 
@@ -527,3 +586,59 @@ export async function searchPlaces(
     );
   }
 }
+
+/**
+ * Extracts image URL from Google Maps link meta tags
+ * @param googleMapsLink - The Google Maps link (e.g., https://maps.google.com/?cid=12345&g_mp=...)
+ * @returns Promise<string> - The extracted image URL or null if not found
+ */
+export const fetchGoogleMapsImage = async (googleMapsLink: string): Promise<string | null> => {
+  try {
+    console.log('🖼️ Fetching Google Maps image from:', googleMapsLink);
+    
+    const response = await fetch(googleMapsLink, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+
+    if (!response.ok) {
+      console.warn('Failed to fetch Google Maps page:', response.status);
+      return null;
+    }
+
+    const html = await response.text();
+    
+    // Parse HTML and extract image URL from meta tags
+    const root = parse(html);
+    
+    // Look for og:image meta tag first
+    const ogImageMeta = root.querySelector('meta[property="og:image"]');
+    if (ogImageMeta) {
+      const imageUrl = ogImageMeta.getAttribute('content');
+      if (imageUrl) {
+        console.log('✅ Successfully extracted image URL from og:image:', imageUrl);
+        return imageUrl;
+      }
+    }
+    
+    // Fallback to itemprop="image" meta tag
+    const itempropImageMeta = root.querySelector('meta[itemprop="image"]');
+    if (itempropImageMeta) {
+      const imageUrl = itempropImageMeta.getAttribute('content');
+      if (imageUrl) {
+        console.log('✅ Successfully extracted image URL from itemprop="image":', imageUrl);
+        return imageUrl;
+      }
+    }
+    
+    // If no image found in any meta tags
+    console.warn('❌ No image found in Google Maps meta tags');
+    return null;
+    
+  } catch (error) {
+    console.error('Error fetching Google Maps image:', error);
+    return null;
+  }
+};
