@@ -89,6 +89,7 @@ import {
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "./middleware/currentUser";
 import { getDummyStartAndEndDate } from "./utils/jsUtils";
+import { mergeMetadata } from "./utils/metadataUtils";
 import pocRoutes from "./poc-routes";
 import { generateContentEmbeddings } from "./poc-embeddings";
 import cronRoutes from "./cronRoutes";
@@ -257,14 +258,14 @@ const processContentAnalysisAsync = async (
     const countryId =
       trip?.metadata &&
       typeof trip.metadata === "object" &&
-      "countryId" in trip.metadata 
+      "countryId" in trip.metadata
         ? (trip.metadata as any).countryId
         : null;
 
     const countryUuid =
       trip?.metadata &&
       typeof trip.metadata === "object" &&
-      "countryUuid" in trip.metadata 
+      "countryUuid" in trip.metadata
         ? (trip.metadata as any).countryUuid
         : null;
 
@@ -281,8 +282,6 @@ const processContentAnalysisAsync = async (
     let shouldSkipProcessing = false;
 
     if (isDemoTrip && isFirstContent && (countryUuid || countryId)) {
-      console.log(`Using demo data for country ${countryUuid || countryId} for URL: ${url}`);
-      
       try {
         // Fetch demo data from database based on country UUID or fallback to ID
         let countryDemoData;
@@ -298,16 +297,24 @@ const processContentAnalysisAsync = async (
 
         if (countryDemoData && countryDemoData.demoData) {
           const demoData = countryDemoData.demoData as unknown as DemoData;
-          
+
           // Parse the structured data to get analysis format
           analysis = JSON.parse(demoData.structuredData);
           title = demoData.title;
           pinsCount = demoData.pins_count;
           shouldSkipProcessing = true;
-          
-          console.log(`Successfully loaded demo data for country ${countryUuid || countryId}`);
+
+          console.log(
+            `Successfully loaded demo data for country ${
+              countryUuid || countryId
+            }`
+          );
         } else {
-          console.log(`No demo data found for country ${countryUuid || countryId}, falling back to AI`);
+          console.log(
+            `No demo data found for country ${
+              countryUuid || countryId
+            }, falling back to AI`
+          );
           analysis = await extractLocationAndClassify(description, req);
           title =
             analysis && analysis.length > 0 && analysis[0].title
@@ -318,7 +325,10 @@ const processContentAnalysisAsync = async (
           ).length;
         }
       } catch (error) {
-        console.error(`Error fetching demo data for country ${countryId}, falling back to AI:`, error);
+        console.error(
+          `Error fetching demo data for country ${countryId}, falling back to AI:`,
+          error
+        );
         analysis = await extractLocationAndClassify(description, req);
         title =
           analysis && analysis.length > 0 && analysis[0].title
@@ -474,7 +484,9 @@ const processContentAnalysisAsync = async (
           const full_loc =
             (analysis.name ?? "") + " " + (analysis.location ?? "");
 
-          console.log(`Processing pin for: ${full_loc} (${analysis.classification})`);
+          console.log(
+            `Processing pin for: ${full_loc} (${analysis.classification})`
+          );
 
           // Step 1: Get Place ID
           const placeId = await getPlaceId(full_loc, req);
@@ -559,8 +571,14 @@ const processContentAnalysisAsync = async (
             `Created Pin - ${pin.id} with content_id - ${contentId} and place_id - ${placeCacheId}`
           );
         } catch (error) {
-          console.error(`Error creating pin for ${analysis.name || 'unknown place'}:`, error);
-          req.logger?.error(`Failed to create pin for ${analysis.name}:`, error);
+          console.error(
+            `Error creating pin for ${analysis.name || "unknown place"}:`,
+            error
+          );
+          req.logger?.error(
+            `Failed to create pin for ${analysis.name}:`,
+            error
+          );
           // Continue processing other pins even if one fails
         }
       })
@@ -576,13 +594,14 @@ const processContentAnalysisAsync = async (
         });
 
         // Update user metadata to mark first tour as completed
+        const updatedMetadata = mergeMetadata(user?.metadata, {
+          has_completed_first_tour: true,
+        });
+
         await prisma.user.update({
           where: { id: userId },
           data: {
-            metadata: {
-              ...((user?.metadata as any) || {}),
-              has_completed_first_tour: true,
-            },
+            metadata: updatedMetadata,
           } as any,
         });
 
@@ -785,14 +804,11 @@ app.get(
     try {
       const currentUser = req.currentUser;
       if (currentUser == null) {
+        console.log("Is current user null", currentUser);
         throw new Error("User not authenticated");
       }
       const { id } = currentUser;
       const trips = await getTripsByUserId(id);
-      if (trips.length === 0) {
-        res.status(404).json({ error: "No trips found for the given user." });
-        return;
-      }
       res.status(200).json(trips);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1101,6 +1117,7 @@ app.post("/api/signin-with-apple", async (req, res) => {
           metadata: {
             new_tour_flow_user: true,
             has_local_trip: false,
+            has_demo_country_trip: false,
             has_completed_first_tour: false,
             has_completed_second_tour: false,
             has_completed_third_tour: false,
@@ -1226,15 +1243,14 @@ app.post(
         select: { metadata: true },
       });
 
-      const userMetadata = currentUserData?.metadata || {};
+      const updatedMetadata = mergeMetadata(currentUserData?.metadata, {
+        has_local_trip: true,
+      });
 
       const updatedUser = await prisma.user.update({
         where: { id: user.id },
         data: {
-          metadata: {
-            ...(userMetadata as object),
-            has_local_trip: true,
-          },
+          metadata: updatedMetadata,
         } as any,
       });
 
@@ -1284,11 +1300,10 @@ app.put(
       }
 
       // Preserve existing metadata and merge with new data
-      const userMetadata = currentUserData?.metadata || {};
-      const updatedMetadata = {
-        ...(userMetadata as object),
-        ...updateData,
-      };
+      const updatedMetadata = mergeMetadata(
+        currentUserData?.metadata,
+        updateData
+      );
 
       const updatedUser = await prisma.user.update({
         where: { id: user.id },
@@ -3788,8 +3803,8 @@ app.post(
 
       // Validate required fields
       if (!contentId || !country) {
-        res.status(400).json({ 
-          error: "Missing required fields: contentId, country" 
+        res.status(400).json({
+          error: "Missing required fields: contentId, country",
         });
         return;
       }
@@ -3809,31 +3824,33 @@ app.post(
       });
 
       if (!content) {
-        res.status(404).json({ error: "Content not found with provided contentId" });
+        res
+          .status(404)
+          .json({ error: "Content not found with provided contentId" });
         return;
       }
 
       // Validate that content URL is Instagram URL
-      if (!content.url.includes('instagram.com')) {
-        res.status(400).json({ 
-          error: "Content URL must be an Instagram URL" 
+      if (!content.url.includes("instagram.com")) {
+        res.status(400).json({
+          error: "Content URL must be an Instagram URL",
         });
         return;
       }
 
       // Check for duplicate URLs in existing demo data for different countries
       const existingDemoData = await prisma.countryDemoData.findFirst({
-        where: { 
+        where: {
           url: content.url,
-          countryName: { not: country }
-        }
+          countryName: { not: country },
+        },
       });
 
       if (existingDemoData) {
         res.status(409).json({
           error: `URL already exists for country: ${existingDemoData.countryName}. Cannot create demo data for ${country} with the same URL.`,
           existingCountry: existingDemoData.countryName,
-          existingCountryId: existingDemoData.countryId
+          existingCountryId: existingDemoData.countryId,
         });
         return;
       }
@@ -3883,65 +3900,67 @@ app.post(
       };
 
       // Country coordinates and flags lookup
-      const countryData: { [key: string]: { lat: number; lng: number; flag: string } } = {
-        "France": { lat: 46.2276, lng: 2.2137, flag: "🇫🇷" },
-        "Spain": { lat: 40.4637, lng: -3.7492, flag: "🇪🇸" },
+      const countryData: {
+        [key: string]: { lat: number; lng: number; flag: string };
+      } = {
+        France: { lat: 46.2276, lng: 2.2137, flag: "🇫🇷" },
+        Spain: { lat: 40.4637, lng: -3.7492, flag: "🇪🇸" },
         "United States": { lat: 37.0902, lng: -95.7129, flag: "🇺🇸" },
-        "China": { lat: 35.8617, lng: 104.1954, flag: "🇨🇳" },
-        "Italy": { lat: 41.8719, lng: 12.5674, flag: "🇮🇹" },
-        "Turkey": { lat: 38.9637, lng: 35.2433, flag: "🇹🇷" },
-        "Mexico": { lat: 23.6345, lng: -102.5528, flag: "🇲🇽" },
-        "Thailand": { lat: 15.8700, lng: 100.9925, flag: "🇹🇭" },
-        "Germany": { lat: 51.1657, lng: 10.4515, flag: "🇩🇪" },
-        "United Kingdom": { lat: 55.3781, lng: -3.4360, flag: "🇬🇧" },
-        "Japan": { lat: 36.2048, lng: 138.2529, flag: "🇯🇵" },
-        "Austria": { lat: 47.5162, lng: 14.5501, flag: "🇦🇹" },
-        "Greece": { lat: 39.0742, lng: 21.8243, flag: "🇬🇷" },
-        "Malaysia": { lat: 4.2105, lng: 101.9758, flag: "🇲🇾" },
-        "Russia": { lat: 61.5240, lng: 105.3188, flag: "🇷🇺" },
-        "Canada": { lat: 56.1304, lng: -106.3468, flag: "🇨🇦" },
-        "Poland": { lat: 51.9194, lng: 19.1451, flag: "🇵🇱" },
-        "Netherlands": { lat: 52.1326, lng: 5.2913, flag: "🇳🇱" },
-        "Ukraine": { lat: 48.3794, lng: 31.1656, flag: "🇺🇦" },
-        "Hungary": { lat: 47.1625, lng: 19.5033, flag: "🇭🇺" },
-        "Portugal": { lat: 39.3999, lng: -8.2245, flag: "🇵🇹" },
+        China: { lat: 35.8617, lng: 104.1954, flag: "🇨🇳" },
+        Italy: { lat: 41.8719, lng: 12.5674, flag: "🇮🇹" },
+        Turkey: { lat: 38.9637, lng: 35.2433, flag: "🇹🇷" },
+        Mexico: { lat: 23.6345, lng: -102.5528, flag: "🇲🇽" },
+        Thailand: { lat: 15.87, lng: 100.9925, flag: "🇹🇭" },
+        Germany: { lat: 51.1657, lng: 10.4515, flag: "🇩🇪" },
+        "United Kingdom": { lat: 55.3781, lng: -3.436, flag: "🇬🇧" },
+        Japan: { lat: 36.2048, lng: 138.2529, flag: "🇯🇵" },
+        Austria: { lat: 47.5162, lng: 14.5501, flag: "🇦🇹" },
+        Greece: { lat: 39.0742, lng: 21.8243, flag: "🇬🇷" },
+        Malaysia: { lat: 4.2105, lng: 101.9758, flag: "🇲🇾" },
+        Russia: { lat: 61.524, lng: 105.3188, flag: "🇷🇺" },
+        Canada: { lat: 56.1304, lng: -106.3468, flag: "🇨🇦" },
+        Poland: { lat: 51.9194, lng: 19.1451, flag: "🇵🇱" },
+        Netherlands: { lat: 52.1326, lng: 5.2913, flag: "🇳🇱" },
+        Ukraine: { lat: 48.3794, lng: 31.1656, flag: "🇺🇦" },
+        Hungary: { lat: 47.1625, lng: 19.5033, flag: "🇭🇺" },
+        Portugal: { lat: 39.3999, lng: -8.2245, flag: "🇵🇹" },
         "Saudi Arabia": { lat: 23.8859, lng: 45.0792, flag: "🇸🇦" },
-        "Croatia": { lat: 45.1000, lng: 15.2000, flag: "🇭🇷" },
-        "Egypt": { lat: 26.0975, lng: 31.1394, flag: "🇪🇬" },
-        "Morocco": { lat: 31.7917, lng: -7.0926, flag: "🇲🇦" },
-        "Czech Republic": { lat: 49.8175, lng: 15.4730, flag: "🇨🇿" },
+        Croatia: { lat: 45.1, lng: 15.2, flag: "🇭🇷" },
+        Egypt: { lat: 26.0975, lng: 31.1394, flag: "🇪🇬" },
+        Morocco: { lat: 31.7917, lng: -7.0926, flag: "🇲🇦" },
+        "Czech Republic": { lat: 49.8175, lng: 15.473, flag: "🇨🇿" },
         "South Korea": { lat: 35.9078, lng: 127.7669, flag: "🇰🇷" },
-        "Indonesia": { lat: -0.7893, lng: 113.9213, flag: "🇮🇩" },
-        "India": { lat: 20.5937, lng: 78.9629, flag: "🇮🇳" },
-        "Vietnam": { lat: 14.0583, lng: 108.2772, flag: "🇻🇳" },
-        "Chile": { lat: -35.6751, lng: -71.5430, flag: "🇨🇱" },
-        "Singapore": { lat: 1.3521, lng: 103.8198, flag: "🇸🇬" },
-        "Philippines": { lat: 12.8797, lng: 121.7740, flag: "🇵🇭" },
+        Indonesia: { lat: -0.7893, lng: 113.9213, flag: "🇮🇩" },
+        India: { lat: 20.5937, lng: 78.9629, flag: "🇮🇳" },
+        Vietnam: { lat: 14.0583, lng: 108.2772, flag: "🇻🇳" },
+        Chile: { lat: -35.6751, lng: -71.543, flag: "🇨🇱" },
+        Singapore: { lat: 1.3521, lng: 103.8198, flag: "🇸🇬" },
+        Philippines: { lat: 12.8797, lng: 121.774, flag: "🇵🇭" },
         "South Africa": { lat: -30.5595, lng: 22.9375, flag: "🇿🇦" },
-        "Argentina": { lat: -38.4161, lng: -63.6167, flag: "🇦🇷" },
-        "Sweden": { lat: 60.1282, lng: 18.6435, flag: "🇸🇪" },
-        "Belgium": { lat: 50.5039, lng: 4.4699, flag: "🇧🇪" },
-        "Norway": { lat: 60.4720, lng: 8.4689, flag: "🇳🇴" },
-        "Ireland": { lat: 53.4129, lng: -8.2439, flag: "🇮🇪" },
-        "Jordan": { lat: 30.5852, lng: 36.2384, flag: "🇯🇴" },
-        "Australia": { lat: -25.2744, lng: 133.7751, flag: "🇦🇺" },
-        "Israel": { lat: 31.0461, lng: 34.8516, flag: "🇮🇱" },
+        Argentina: { lat: -38.4161, lng: -63.6167, flag: "🇦🇷" },
+        Sweden: { lat: 60.1282, lng: 18.6435, flag: "🇸🇪" },
+        Belgium: { lat: 50.5039, lng: 4.4699, flag: "🇧🇪" },
+        Norway: { lat: 60.472, lng: 8.4689, flag: "🇳🇴" },
+        Ireland: { lat: 53.4129, lng: -8.2439, flag: "🇮🇪" },
+        Jordan: { lat: 30.5852, lng: 36.2384, flag: "🇯🇴" },
+        Australia: { lat: -25.2744, lng: 133.7751, flag: "🇦🇺" },
+        Israel: { lat: 31.0461, lng: 34.8516, flag: "🇮🇱" },
         "United Arab Emirates": { lat: 23.4241, lng: 53.8478, flag: "🇦🇪" },
-        "Denmark": { lat: 56.2639, lng: 9.5018, flag: "🇩🇰" },
-        "Finland": { lat: 61.9241, lng: 25.7482, flag: "🇫🇮" },
-        "Bulgaria": { lat: 42.7339, lng: 25.4858, flag: "🇧🇬" },
-        "Tunisia": { lat: 33.8869, lng: 9.5375, flag: "🇹🇳" },
-        "New Zealand": { lat: -40.9006, lng: 174.8860, flag: "🇳🇿" },
-        "Brazil": { lat: -14.2350, lng: -51.9253, flag: "🇧🇷" },
-        "Switzerland": { lat: 46.8182, lng: 8.2275, flag: "🇨🇭" }
+        Denmark: { lat: 56.2639, lng: 9.5018, flag: "🇩🇰" },
+        Finland: { lat: 61.9241, lng: 25.7482, flag: "🇫🇮" },
+        Bulgaria: { lat: 42.7339, lng: 25.4858, flag: "🇧🇬" },
+        Tunisia: { lat: 33.8869, lng: 9.5375, flag: "🇹🇳" },
+        "New Zealand": { lat: -40.9006, lng: 174.886, flag: "🇳🇿" },
+        Brazil: { lat: -14.235, lng: -51.9253, flag: "🇧🇷" },
+        Switzerland: { lat: 46.8182, lng: 8.2275, flag: "🇨🇭" },
       };
 
       // Get country coordinates and flag
       const countryInfo = countryData[country];
-      
+
       if (!countryInfo) {
         res.status(400).json({
-          error: `Unsupported country: ${country}. Please use a supported country name.`
+          error: `Unsupported country: ${country}. Please use a supported country name.`,
         });
         return;
       }
@@ -4007,7 +4026,7 @@ app.get(
           flag: true,
         },
         orderBy: {
-          countryName: 'asc',
+          countryName: "asc",
         },
       });
 
@@ -4048,10 +4067,11 @@ app.post(
       }
 
       const { countryId, countryName, countryUuid } = req.body;
-      
+
       if (!countryUuid && (!countryId || !countryName)) {
-        res.status(400).json({ 
-          error: "Missing required fields: either countryUuid OR (countryId and countryName)" 
+        res.status(400).json({
+          error:
+            "Missing required fields: either countryUuid OR (countryId and countryName)",
         });
         return;
       }
@@ -4071,15 +4091,19 @@ app.post(
       }
 
       if (!countryDemoData) {
-        res.status(404).json({ 
-          error: `No demo data available for country: ${countryUuid ? 'with UUID ' + countryUuid : countryName}` 
+        res.status(404).json({
+          error: `No demo data available for country: ${
+            countryUuid ? "with UUID " + countryUuid : countryName
+          }`,
         });
         return;
       }
 
       const { startDate, endDate } = getDummyStartAndEndDate();
       const currentYear = new Date().getFullYear();
-      const firstName = currentUser.name ? currentUser.name.split(" ")[0] : "My";
+      const firstName = currentUser.name
+        ? currentUser.name.split(" ")[0]
+        : "My";
 
       // Use data from the found country record
       const finalCountryName = countryDemoData.countryName;
@@ -4092,15 +4116,33 @@ app.post(
         startDate,
         endDate,
         `My dream trip to ${finalCountryName}`,
-        { 
-          type: "demo", 
+        {
+          type: "demo",
           countryUuid: countryDemoData.id,
           countryId: finalCountryId,
           countryName: finalCountryName,
-          isDemo: true, 
-          tutorial_completed: false 
+          isDemo: true,
+          tutorial_completed: false,
         }
       );
+
+      // Update user metadata to mark demo country trip as created
+      // Fetch the complete user data to preserve existing metadata
+      const currentUserData = await prisma.user.findUnique({
+        where: { id: currentUser.id },
+        select: { metadata: true },
+      });
+
+      const updatedMetadata = mergeMetadata(currentUserData?.metadata, {
+        has_demo_country_trip: true,
+      });
+
+      await prisma.user.update({
+        where: { id: currentUser.id },
+        data: {
+          metadata: updatedMetadata,
+        } as any,
+      });
 
       res.status(201).json({
         success: true,
@@ -4117,7 +4159,7 @@ app.post(
           countryUuid: countryDemoData.id,
           countryId: finalCountryId,
           countryName: finalCountryName,
-        }
+        },
       });
     } catch (error) {
       console.error("Error creating demo trip:", error);

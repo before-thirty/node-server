@@ -17,12 +17,12 @@ model User {
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
   firebaseId          String
-  isBlocked           Boolean           @default(false)
-  blockedAt           DateTime?
   blockReason         String?
+  blockedAt           DateTime?
+  isBlocked           Boolean           @default(false)
   bucketListCountries String[]          @default([])
+  metadata            Json?             @default("{}")
   lastOpened          DateTime?
-  metadata            Json?
   Message             ChatMessage[]
   contents            Content[]
   reportedContent     ContentReport[]   @relation("ContentReporter")
@@ -51,7 +51,7 @@ model Trip {
   isPublic         Boolean           @default(false)
   likes            Int?              @default(0)
   viewCount        Int?              @default(0)
-  metadata         Json?
+  metadata         Json?             @default("{}")
   Message          ChatMessage[]
   contents         Content[]
   ShareToken       ShareToken[]
@@ -88,15 +88,15 @@ model Content {
   pins_count                 Int                    @default(0)
   thumbnail                  String                 @default("")
   title                      String                 @default("")
-  status                     ContentStatus          @default(PROCESSING)
-  isHidden                   Boolean                @default(false)
+  last_embedding_update      DateTime?
+  raw_data_embedding         Unsupported("vector")?
+  structured_data_embedding  Unsupported("vector")?
+  title_embedding            Unsupported("vector")?
+  user_notes_embedding       Unsupported("vector")?
   hiddenAt                   DateTime?
   hideReason                 String?
-  last_embedding_update      DateTime?
-  title_embedding            Unsupported("vector")?
-  raw_data_embedding         Unsupported("vector")?
-  user_notes_embedding       Unsupported("vector")?
-  structured_data_embedding  Unsupported("vector")?
+  isHidden                   Boolean                @default(false)
+  status                     ContentStatus          @default(PROCESSING)
   trip                       Trip                   @relation(fields: [tripId], references: [id], onDelete: Cascade)
   user                       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   contentReports             ContentReport[]
@@ -137,6 +137,7 @@ model PlaceCache {
   googleMapsLink      String?
   images              String[]
   utcOffsetMinutes    Int?
+  googleMapsLink      String?
   pins                Pin[]
   userPlaceMustDos    UserPlaceMustDo[]
 
@@ -152,9 +153,9 @@ model ChatMessage {
   fileUrl    String?
   fileName   String?
   tripId     String
-  isHidden   Boolean   @default(false)
   hiddenAt   DateTime?
   hideReason String?
+  isHidden   Boolean   @default(false)
   trip       Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -168,8 +169,8 @@ model ShareToken {
   createdBy String
   createdAt DateTime @default(now())
   expiresAt DateTime
-  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
   @@schema("app_data")
 }
@@ -216,8 +217,8 @@ model UserReport {
   createdAt      DateTime         @default(now())
   reviewedAt     DateTime?
   reviewedBy     String?
-  reportedUser   User             @relation("ReportedUser", fields: [reportedUserId], references: [id])
   reporter       User             @relation("UserReporter", fields: [reportedBy], references: [id])
+  reportedUser   User             @relation("ReportedUser", fields: [reportedUserId], references: [id])
 
   @@unique([reportedUserId, reportedBy])
   @@schema("app_data")
@@ -248,6 +249,21 @@ model FcmToken {
 
   @@index([userId])
   @@index([fcmToken])
+  @@schema("app_data")
+}
+
+model CountryDemoData {
+  id          String   @id @default(uuid())
+  countryName String   @unique
+  countryId   String
+  url         String
+  demoData    Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  flag        String?
+  lat         Float?
+  lng         Float?
+
   @@schema("app_data")
 }
 
@@ -291,21 +307,6 @@ enum ContentStatus {
   PROCESSING
   COMPLETED
   FAILED
-
-  @@schema("app_data")
-}
-
-model CountryDemoData {
-  id          String   @id @default(uuid())
-  countryName String   @unique
-  countryId   String
-  url         String
-  demoData    Json
-  lat         Float?   // Latitude for map display
-  lng         Float?   // Longitude for map display
-  flag        String?  // Country flag emoji
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 
   @@schema("app_data")
 }
