@@ -137,7 +137,6 @@ model PlaceCache {
   googleMapsLink      String?
   images              String[]
   utcOffsetMinutes    Int?
-  googleMapsLink      String?
   pins                Pin[]
   userPlaceMustDos    UserPlaceMustDo[]
 
