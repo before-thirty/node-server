@@ -390,85 +390,10 @@ const processContentAnalysisAsync = async (
     await updateContent(contentId, analysis, title, pinsCount);
 
     // If no external API calls are needed, set status to COMPLETED and send notifications
-    if (!needsExternalAPI) {
-      await updateContentStatus(contentId, "COMPLETED");
-
-      // Get content details for notification
-      const contentWithDetails = await prisma.content.findUnique({
-        where: { id: contentId },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          trip: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-      });
-
-      // Send notifications to trip members about pins added (if any pins were added)
-      if (pinsCount > 0 && contentWithDetails) {
-        try {
-          await sendPinAddedNotifications(
-            contentWithDetails.trip.id,
-            contentWithDetails.user.id,
-            pinsCount,
-            contentWithDetails.trip.name,
-            contentWithDetails.user.name,
-            title || contentWithDetails.title || undefined,
-            contentWithDetails.id
-          );
-        } catch (notificationError) {
-          console.error(
-            "Error sending pin added notifications:",
-            notificationError
-          );
-          // Don't fail the request if notifications fail
-        }
-      }
-
-      // Emit completion status via WebSocket for content that doesn't need external API
-      emitContentProcessingStatus(tripId, contentId, "completed", {
-        pinsCount: pinsCount,
-        title: title,
-      });
-    }
 
     req.logger?.debug(
       `Updated content entry with structured data ${contentId}`
     );
-
-    // Note: Notifications are sent either above (if no external API) or later in /api/update-content
-
-    // Generate embeddings for the new content in the background
-    try {
-      console.log(
-        `🔄 Starting embedding generation for new content ${contentId}...`
-      );
-      generateContentEmbeddings(contentId)
-        .then(() => {
-          console.log(
-            `✅ Embeddings generated successfully for content ${contentId}`
-          );
-        })
-        .catch((embeddingError) => {
-          console.error(
-            `❌ Failed to generate embeddings for content ${contentId}:`,
-            embeddingError
-          );
-        });
-    } catch (embeddingError) {
-      console.error(
-        `❌ Error starting embedding generation for content ${contentId}:`,
-        embeddingError
-      );
-    }
 
     let pinsCreated = 0;
 
@@ -606,14 +531,87 @@ const processContentAnalysisAsync = async (
         });
 
         req.logger?.info(
-          `Updated user ${userId} metadata: has_completed_first_tour = true (Japan demo trip pin created)`
+          `Updated user ${userId} metadata: has_completed_first_tour = true (demo trip pins created)`
         );
       } catch (error) {
         req.logger?.error(
-          `Failed to update user metadata for Japan demo trip:`,
+          `Failed to update user metadata for demo trip:`,
           error
         );
       }
+    }
+
+    if (!needsExternalAPI) {
+      await updateContentStatus(contentId, "COMPLETED");
+
+      // Get content details for notification
+      const contentWithDetails = await prisma.content.findUnique({
+        where: { id: contentId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          trip: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      // Send notifications to trip members about pins added (if any pins were added)
+      if (pinsCount > 0 && contentWithDetails) {
+        try {
+          await sendPinAddedNotifications(
+            contentWithDetails.trip.id,
+            contentWithDetails.user.id,
+            pinsCount,
+            contentWithDetails.trip.name,
+            contentWithDetails.user.name,
+            title || contentWithDetails.title || undefined,
+            contentWithDetails.id
+          );
+        } catch (notificationError) {
+          console.error(
+            "Error sending pin added notifications:",
+            notificationError
+          );
+          // Don't fail the request if notifications fail
+        }
+      }
+
+      // Emit completion status via WebSocket for content that doesn't need external API
+      emitContentProcessingStatus(tripId, contentId, "completed", {
+        pinsCount: pinsCount,
+        title: title,
+      });
+    }
+
+    try {
+      console.log(
+        `🔄 Starting embedding generation for new content ${contentId}...`
+      );
+      generateContentEmbeddings(contentId)
+        .then(() => {
+          console.log(
+            `✅ Embeddings generated successfully for content ${contentId}`
+          );
+        })
+        .catch((embeddingError) => {
+          console.error(
+            `❌ Failed to generate embeddings for content ${contentId}:`,
+            embeddingError
+          );
+        });
+    } catch (embeddingError) {
+      console.error(
+        `❌ Error starting embedding generation for content ${contentId}:`,
+        embeddingError
+      );
     }
 
     console.log(`✅ Async processing completed for content ${contentId}`);
