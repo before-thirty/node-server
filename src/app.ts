@@ -10,6 +10,7 @@ import { requestLogger } from "./middleware/logger";
 import {
   extractLocationAndClassify,
   classifyPlaceCategory,
+  analyzeYouTubeContent,
 } from "./helpers/openai";
 import parser from "html-metadata-parser";
 import {
@@ -364,7 +365,7 @@ const processContentAnalysisAsync = async (
       (url.includes("instagram.com") || url.includes("tiktok.com"));
 
     // Fire external API calls without waiting for response if needed
-    if (!shouldSkipProcessing && url.includes("instagram.com")) {
+    if (!shouldSkipProcessing && url.includes("instagram.com") ||  url.includes("youtube") ||  url.includes("youtu.be")) {
       console.log("Instagram URL detected, calling analysis API");
       fetch("https://kadshnkjadnk.pinspire.co.in/api/analyze", {
         method: "POST",
@@ -601,7 +602,7 @@ const processContentAnalysisAsync = async (
       generateContentEmbeddings(contentId)
         .then(() => {
           console.log(
-            `✅ Embeddings generated successfully for content ${contentId}`
+            ` Embeddings generated successfully for content ${contentId}`
           );
         })
         .catch((embeddingError) => {
@@ -617,7 +618,7 @@ const processContentAnalysisAsync = async (
       );
     }
 
-    console.log(`✅ Async processing completed for content ${contentId}`);
+    console.log(` Async processing completed for content ${contentId}`);
   } catch (error) {
     console.error(
       `❌ Error in async processing for content ${contentId}:`,
@@ -666,7 +667,9 @@ app.post(
         if (
           url.includes("instagram.com") ||
           url.includes("facebook.com") ||
-          url.includes("tiktok.com")
+          url.includes("tiktok.com") ||
+          url.includes("youtube.com") ||
+          url.includes("youtu.be")
         ) {
           req.logger?.debug(
             `Social media URL detected, using metadata extraction`
@@ -679,6 +682,46 @@ app.post(
               `Facebook URL detected, using custom metadata extraction`
             );
             description = metadata?.og.title ?? "";
+          } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
+            req.logger?.debug("YouTube URL detected, analyzing content...");
+            const title = metadata?.meta?.title;
+            const desc = metadata?.meta?.description;
+            console.log("Title", title)
+            console.log("Description", desc)
+            if (title && desc) {
+              const isTravelContent = await analyzeYouTubeContent(
+                title,
+                desc,
+                req
+              );
+              if (!isTravelContent) {
+                req.logger?.info(
+                  `YouTube content is not travel-related. Skipping processing for URL: ${url}`
+                );
+                // Immediately return a response indicating that the content is not relevant
+                res.status(200).json({
+                  success: false,
+                  message:
+                    "YouTube content is not travel-related and will not be processed.",
+                });
+                return; 
+              }
+              req.logger?.info(
+                "YouTube content is travel-related. Proceeding with processing."
+              );
+              description = [title, desc].filter(Boolean).join(" ");
+            } else {
+              req.logger?.warn(
+                `Missing title or description for YouTube URL: ${url}. Skipping analysis.`
+              );
+              
+              res.status(200).json({
+                  success: false,
+                  message:
+                    `Missing title or description for YouTube URL: ${url}`,
+              });
+              return;
+            }
           } else {
             description = [metadata?.meta.title, metadata?.meta.description]
               .filter(Boolean)
@@ -728,7 +771,7 @@ app.post(
         }
       }
 
-      console.log("Desc is ", description);
+      console.log("Description is ", description);
 
       if (!description) {
         req.logger?.error(`Failed to fetch metadata for URL - ${url}`);
@@ -745,7 +788,7 @@ app.post(
       );
 
       console.log(
-        `✅ Content created with ID: ${newContent.id}. Starting async processing...`
+        `Content created with ID: ${newContent.id}. Starting async processing...`
       );
       req.logger?.info(
         `Content created: ${newContent.id}. Processing will continue asynchronously.`
@@ -2192,7 +2235,7 @@ app.put(
         generateContentEmbeddings(contentId)
           .then(() => {
             console.log(
-              `✅ Embeddings regenerated successfully for content ${contentId}`
+              ` Embeddings regenerated successfully for content ${contentId}`
             );
           })
           .catch((embeddingError) => {
@@ -3042,7 +3085,7 @@ app.post(
         generateContentEmbeddings(content_id)
           .then(() => {
             console.log(
-              `✅ Embeddings generated successfully for content ${content_id}`
+              ` Embeddings generated successfully for content ${content_id}`
             );
           })
           .catch((embeddingError) => {
@@ -3129,7 +3172,7 @@ app.patch(
       const updatedContent = await updateContentStatus(contentId, status);
 
       console.log(
-        `✅ Content status updated successfully: ${contentId} -> ${status}`
+        ` Content status updated successfully: ${contentId} -> ${status}`
       );
       req.logger?.info(`Content status updated: ${contentId} -> ${status}`);
 
@@ -4194,7 +4237,7 @@ app.post(
                 
                 // Always update images array - either with Google Maps image or empty (no backup mode)
                 if (googleMapsImage) {
-                  console.log(`✅ Found Google Maps image for ${place.name}: ${googleMapsImage}`);
+                  console.log(` Found Google Maps image for ${place.name}: ${googleMapsImage}`);
                   updateData.images = [googleMapsImage]; // Replace existing images with the Google Maps image
                 } else {
                   console.log(`⚠️ No image found for ${place.name} Google Maps link - clearing images array`);
@@ -4207,7 +4250,7 @@ app.post(
                   data: updateData,
                 });
                 
-                console.log(`✅ Updated ${place.name}: ${googleMapsUri}${googleMapsImage ? ' with image' : ''}`);
+                console.log(` Updated ${place.name}: ${googleMapsUri}${googleMapsImage ? ' with image' : ''}`);
                 successCount++;
               } else {
                 console.log(`⚠️ No Google Maps URI found for ${place.name}`);

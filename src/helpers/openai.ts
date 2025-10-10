@@ -208,3 +208,41 @@ export async function classifyPlaceCategory(placeDetails: {
     return "Attraction"; // Default fallback
   }
 }
+export async function analyzeYouTubeContent(
+  title: string,
+  description: string,
+  req: Request
+): Promise<boolean> {
+  try {
+    const prompt = `Analyze the provided YouTube video title and description. Determine if the content is travel-related. It can contain places, attractions, restaurants, nature, or tourist spots. It can focus on travel itineraries, destination guides, or place-based travel content. Return only 'True' if the content is clearly about travel, destinations, or attractions, otherwise return 'False'.`;
+
+    const response = await openaiClient.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: prompt,
+        },
+        {
+          role: "user",
+          content: `Title: "${title}"\nDescription: "${description}"`,
+        },
+      ],
+    });
+
+    const content = response.choices[0]?.message?.content?.trim();
+    req.logger?.debug(`YouTube analysis response from ChatGPT: ${content}`);
+
+    if (response.choices[0]?.message?.refusal) {
+      req.logger?.error(
+        `OpenAI refused the request: ${response.choices[0].message.refusal}`
+      );
+      return false;
+    }
+
+    return content === "True";
+  } catch (error) {
+    req.logger?.error("Error calling OpenAI API for YouTube content analysis:", error);
+    return false;
+  }
+}
