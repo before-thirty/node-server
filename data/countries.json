@@ -1,0 +1,1089 @@
+{
+  "countries": [
+    {
+      "name": "Afghanistan",
+      "code": "AF",
+      "capital": "Kabul",
+      "language": "Pashto/Dari",
+      "hello": "سلام (Salām)",
+      "flag": "🇦🇫",
+      "continent": "Asia"
+    },
+    {
+      "name": "Albania",
+      "code": "AL",
+      "capital": "Tirana",
+      "language": "Albanian",
+      "hello": "Përshëndetje",
+      "flag": "🇦🇱",
+      "continent": "Europe"
+    },
+    {
+      "name": "Algeria",
+      "code": "DZ",
+      "capital": "Algiers",
+      "language": "Arabic",
+      "hello": "مرحبا (Marhaban)",
+      "flag": "🇩🇿",
+      "continent": "Africa"
+    },
+    {
+      "name": "Argentina",
+      "code": "AR",
+      "capital": "Buenos Aires",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇦🇷",
+      "continent": "South America"
+    },
+    {
+      "name": "Armenia",
+      "code": "AM",
+      "capital": "Yerevan",
+      "language": "Armenian",
+      "hello": "Բարև (Barev)",
+      "flag": "🇦🇲",
+      "continent": "Asia"
+    },
+    {
+      "name": "Australia",
+      "code": "AU",
+      "capital": "Canberra",
+      "language": "English",
+      "hello": "Hello",
+      "flag": "🇦🇺",
+      "continent": "Oceania"
+    },
+    {
+      "name": "Austria",
+      "code": "AT",
+      "capital": "Vienna",
+      "language": "German",
+      "hello": "Hallo",
+      "flag": "🇦🇹",
+      "continent": "Europe"
+    },
+    {
+      "name": "Azerbaijan",
+      "code": "AZ",
+      "capital": "Baku",
+      "language": "Azerbaijani",
+      "hello": "Salam",
+      "flag": "🇦🇿",
+      "continent": "Asia"
+    },
+    {
+      "name": "Bangladesh",
+      "code": "BD",
+      "capital": "Dhaka",
+      "language": "Bengali",
+      "hello": "নমস্কার (Nomoshkar)",
+      "flag": "🇧🇩",
+      "continent": "Asia"
+    },
+    {
+      "name": "Belarus",
+      "code": "BY",
+      "capital": "Minsk",
+      "language": "Belarusian",
+      "hello": "Прывітанне (Pryvitanne)",
+      "flag": "🇧🇾",
+      "continent": "Europe"
+    },
+    {
+      "name": "Belgium",
+      "code": "BE",
+      "capital": "Brussels",
+      "language": "Dutch/French",
+      "hello": "Hallo/Bonjour",
+      "flag": "🇧🇪",
+      "continent": "Europe"
+    },
+    {
+      "name": "Bolivia",
+      "code": "BO",
+      "capital": "La Paz",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇧🇴",
+      "continent": "South America"
+    },
+    {
+      "name": "Brazil",
+      "code": "BR",
+      "capital": "Brasília",
+      "language": "Portuguese",
+      "hello": "Olá",
+      "flag": "🇧🇷",
+      "continent": "South America"
+    },
+    {
+      "name": "Bulgaria",
+      "code": "BG",
+      "capital": "Sofia",
+      "language": "Bulgarian",
+      "hello": "Здравейте (Zdraveyte)",
+      "flag": "🇧🇬",
+      "continent": "Europe"
+    },
+    {
+      "name": "Cambodia",
+      "code": "KH",
+      "capital": "Phnom Penh",
+      "language": "Khmer",
+      "hello": "ជំរាបសួរ (Chum reap suor)",
+      "flag": "🇰🇭",
+      "continent": "Asia"
+    },
+    {
+      "name": "Canada",
+      "code": "CA",
+      "capital": "Ottawa",
+      "language": "English/French",
+      "hello": "Hello/Bonjour",
+      "flag": "🇨🇦",
+      "continent": "North America"
+    },
+    {
+      "name": "Chile",
+      "code": "CL",
+      "capital": "Santiago",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇨🇱",
+      "continent": "South America"
+    },
+    {
+      "name": "China",
+      "code": "CN",
+      "capital": "Beijing",
+      "language": "Mandarin Chinese",
+      "hello": "你好 (Nǐ hǎo)",
+      "flag": "🇨🇳",
+      "continent": "Asia"
+    },
+    {
+      "name": "Colombia",
+      "code": "CO",
+      "capital": "Bogotá",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇨🇴",
+      "continent": "South America"
+    },
+    {
+      "name": "Croatia",
+      "code": "HR",
+      "capital": "Zagreb",
+      "language": "Croatian",
+      "hello": "Bok",
+      "flag": "🇭🇷",
+      "continent": "Europe"
+    },
+    {
+      "name": "Czech Republic",
+      "code": "CZ",
+      "capital": "Prague",
+      "language": "Czech",
+      "hello": "Ahoj",
+      "flag": "🇨🇿",
+      "continent": "Europe"
+    },
+    {
+      "name": "Denmark",
+      "code": "DK",
+      "capital": "Copenhagen",
+      "language": "Danish",
+      "hello": "Hej",
+      "flag": "🇩🇰",
+      "continent": "Europe"
+    },
+    {
+      "name": "Egypt",
+      "code": "EG",
+      "capital": "Cairo",
+      "language": "Arabic",
+      "hello": "أهلا (Ahlan)",
+      "flag": "🇪🇬",
+      "continent": "Africa"
+    },
+    {
+      "name": "Estonia",
+      "code": "EE",
+      "capital": "Tallinn",
+      "language": "Estonian",
+      "hello": "Tere",
+      "flag": "🇪🇪",
+      "continent": "Europe"
+    },
+    {
+      "name": "Ethiopia",
+      "code": "ET",
+      "capital": "Addis Ababa",
+      "language": "Amharic",
+      "hello": "ሰላም (Selam)",
+      "flag": "🇪🇹",
+      "continent": "Africa"
+    },
+    {
+      "name": "Finland",
+      "code": "FI",
+      "capital": "Helsinki",
+      "language": "Finnish",
+      "hello": "Hei",
+      "flag": "🇫🇮",
+      "continent": "Europe"
+    },
+    {
+      "name": "France",
+      "code": "FR",
+      "capital": "Paris",
+      "language": "French",
+      "hello": "Bonjour",
+      "flag": "🇫🇷",
+      "continent": "Europe"
+    },
+    {
+      "name": "Georgia",
+      "code": "GE",
+      "capital": "Tbilisi",
+      "language": "Georgian",
+      "hello": "გამარჯობა (Gamarjoba)",
+      "flag": "🇬🇪",
+      "continent": "Asia"
+    },
+    {
+      "name": "Germany",
+      "code": "DE",
+      "capital": "Berlin",
+      "language": "German",
+      "hello": "Hallo",
+      "flag": "🇩🇪",
+      "continent": "Europe"
+    },
+    {
+      "name": "Ghana",
+      "code": "GH",
+      "capital": "Accra",
+      "language": "English",
+      "hello": "Hello",
+      "flag": "🇬🇭",
+      "continent": "Africa"
+    },
+    {
+      "name": "Greece",
+      "code": "GR",
+      "capital": "Athens",
+      "language": "Greek",
+      "hello": "Γεια σας (Yia sas)",
+      "flag": "🇬🇷",
+      "continent": "Europe"
+    },
+    {
+      "name": "Hungary",
+      "code": "HU",
+      "capital": "Budapest",
+      "language": "Hungarian",
+      "hello": "Szia",
+      "flag": "🇭🇺",
+      "continent": "Europe"
+    },
+    {
+      "name": "Iceland",
+      "code": "IS",
+      "capital": "Reykjavik",
+      "language": "Icelandic",
+      "hello": "Halló",
+      "flag": "🇮🇸",
+      "continent": "Europe"
+    },
+    {
+      "name": "India",
+      "code": "IN",
+      "capital": "New Delhi",
+      "language": "Hindi",
+      "hello": "नमस्ते (Namaste)",
+      "flag": "🇮🇳",
+      "continent": "Asia"
+    },
+    {
+      "name": "Indonesia",
+      "code": "ID",
+      "capital": "Jakarta",
+      "language": "Indonesian",
+      "hello": "Halo",
+      "flag": "🇮🇩",
+      "continent": "Asia"
+    },
+    {
+      "name": "Iran",
+      "code": "IR",
+      "capital": "Tehran",
+      "language": "Persian",
+      "hello": "سلام (Salām)",
+      "flag": "🇮🇷",
+      "continent": "Asia"
+    },
+    {
+      "name": "Iraq",
+      "code": "IQ",
+      "capital": "Baghdad",
+      "language": "Arabic",
+      "hello": "مرحبا (Marhaban)",
+      "flag": "🇮🇶",
+      "continent": "Asia"
+    },
+    {
+      "name": "Ireland",
+      "code": "IE",
+      "capital": "Dublin",
+      "language": "English/Irish",
+      "hello": "Hello/Dia dhuit",
+      "flag": "🇮🇪",
+      "continent": "Europe"
+    },
+    {
+      "name": "Israel",
+      "code": "IL",
+      "capital": "Jerusalem",
+      "language": "Hebrew",
+      "hello": "שלום (Shalom)",
+      "flag": "🇮🇱",
+      "continent": "Asia"
+    },
+    {
+      "name": "Italy",
+      "code": "IT",
+      "capital": "Rome",
+      "language": "Italian",
+      "hello": "Ciao",
+      "flag": "🇮🇹",
+      "continent": "Europe"
+    },
+    {
+      "name": "Japan",
+      "code": "JP",
+      "capital": "Tokyo",
+      "language": "Japanese",
+      "hello": "こんにちは (Konnichiwa)",
+      "flag": "🇯🇵",
+      "continent": "Asia"
+    },
+    {
+      "name": "Jordan",
+      "code": "JO",
+      "capital": "Amman",
+      "language": "Arabic",
+      "hello": "مرحبا (Marhaban)",
+      "flag": "🇯🇴",
+      "continent": "Asia"
+    },
+    {
+      "name": "Kazakhstan",
+      "code": "KZ",
+      "capital": "Nur-Sultan",
+      "language": "Kazakh",
+      "hello": "Сәлем (Sälem)",
+      "flag": "🇰🇿",
+      "continent": "Asia"
+    },
+    {
+      "name": "Kenya",
+      "code": "KE",
+      "capital": "Nairobi",
+      "language": "Swahili",
+      "hello": "Hujambo",
+      "flag": "🇰🇪",
+      "continent": "Africa"
+    },
+    {
+      "name": "Latvia",
+      "code": "LV",
+      "capital": "Riga",
+      "language": "Latvian",
+      "hello": "Sveiki",
+      "flag": "🇱🇻",
+      "continent": "Europe"
+    },
+    {
+      "name": "Lebanon",
+      "code": "LB",
+      "capital": "Beirut",
+      "language": "Arabic",
+      "hello": "مرحبا (Marhaban)",
+      "flag": "🇱🇧",
+      "continent": "Asia"
+    },
+    {
+      "name": "Lithuania",
+      "code": "LT",
+      "capital": "Vilnius",
+      "language": "Lithuanian",
+      "hello": "Labas",
+      "flag": "🇱🇹",
+      "continent": "Europe"
+    },
+    {
+      "name": "Malaysia",
+      "code": "MY",
+      "capital": "Kuala Lumpur",
+      "language": "Malay",
+      "hello": "Hello/Selamat pagi",
+      "flag": "🇲🇾",
+      "continent": "Asia"
+    },
+    {
+      "name": "Mexico",
+      "code": "MX",
+      "capital": "Mexico City",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇲🇽",
+      "continent": "North America"
+    },
+    {
+      "name": "Mongolia",
+      "code": "MN",
+      "capital": "Ulaanbaatar",
+      "language": "Mongolian",
+      "hello": "Сайн байна уу (Sain baina uu)",
+      "flag": "🇲🇳",
+      "continent": "Asia"
+    },
+    {
+      "name": "Morocco",
+      "code": "MA",
+      "capital": "Rabat",
+      "language": "Arabic",
+      "hello": "السلام عليكم (As-salāmu ʿalaykum)",
+      "flag": "🇲🇦",
+      "continent": "Africa"
+    },
+    {
+      "name": "Nepal",
+      "code": "NP",
+      "capital": "Kathmandu",
+      "language": "Nepali",
+      "hello": "नमस्ते (Namaste)",
+      "flag": "🇳🇵",
+      "continent": "Asia"
+    },
+    {
+      "name": "Netherlands",
+      "code": "NL",
+      "capital": "Amsterdam",
+      "language": "Dutch",
+      "hello": "Hallo",
+      "flag": "🇳🇱",
+      "continent": "Europe"
+    },
+    {
+      "name": "New Zealand",
+      "code": "NZ",
+      "capital": "Wellington",
+      "language": "English",
+      "hello": "Hello/Kia ora",
+      "flag": "🇳🇿",
+      "continent": "Oceania"
+    },
+    {
+      "name": "Nigeria",
+      "code": "NG",
+      "capital": "Abuja",
+      "language": "English",
+      "hello": "Hello",
+      "flag": "🇳🇬",
+      "continent": "Africa"
+    },
+    {
+      "name": "North Korea",
+      "code": "KP",
+      "capital": "Pyongyang",
+      "language": "Korean",
+      "hello": "안녕하세요 (Annyeonghaseyo)",
+      "flag": "🇰🇵",
+      "continent": "Asia"
+    },
+    {
+      "name": "Norway",
+      "code": "NO",
+      "capital": "Oslo",
+      "language": "Norwegian",
+      "hello": "Hei",
+      "flag": "🇳🇴",
+      "continent": "Europe"
+    },
+    {
+      "name": "Pakistan",
+      "code": "PK",
+      "capital": "Islamabad",
+      "language": "Urdu",
+      "hello": "آداب (Adab)",
+      "flag": "🇵🇰",
+      "continent": "Asia"
+    },
+    {
+      "name": "Peru",
+      "code": "PE",
+      "capital": "Lima",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇵🇪",
+      "continent": "South America"
+    },
+    {
+      "name": "Philippines",
+      "code": "PH",
+      "capital": "Manila",
+      "language": "Filipino",
+      "hello": "Kumusta",
+      "flag": "🇵🇭",
+      "continent": "Asia"
+    },
+    {
+      "name": "Poland",
+      "code": "PL",
+      "capital": "Warsaw",
+      "language": "Polish",
+      "hello": "Cześć",
+      "flag": "🇵🇱",
+      "continent": "Europe"
+    },
+    {
+      "name": "Portugal",
+      "code": "PT",
+      "capital": "Lisbon",
+      "language": "Portuguese",
+      "hello": "Olá",
+      "flag": "🇵🇹",
+      "continent": "Europe"
+    },
+    {
+      "name": "Romania",
+      "code": "RO",
+      "capital": "Bucharest",
+      "language": "Romanian",
+      "hello": "Bună",
+      "flag": "🇷🇴",
+      "continent": "Europe"
+    },
+    {
+      "name": "Russia",
+      "code": "RU",
+      "capital": "Moscow",
+      "language": "Russian",
+      "hello": "Привет (Privet)",
+      "flag": "🇷🇺",
+      "continent": "Europe/Asia"
+    },
+    {
+      "name": "Saudi Arabia",
+      "code": "SA",
+      "capital": "Riyadh",
+      "language": "Arabic",
+      "hello": "مرحبا (Marhaban)",
+      "flag": "🇸🇦",
+      "continent": "Asia"
+    },
+    {
+      "name": "Serbia",
+      "code": "RS",
+      "capital": "Belgrade",
+      "language": "Serbian",
+      "hello": "Здраво (Zdravo)",
+      "flag": "🇷🇸",
+      "continent": "Europe"
+    },
+    {
+      "name": "Singapore",
+      "code": "SG",
+      "capital": "Singapore",
+      "language": "English/Malay/Mandarin/Tamil",
+      "hello": "Hello",
+      "flag": "🇸🇬",
+      "continent": "Asia"
+    },
+    {
+      "name": "Slovakia",
+      "code": "SK",
+      "capital": "Bratislava",
+      "language": "Slovak",
+      "hello": "Ahoj",
+      "flag": "🇸🇰",
+      "continent": "Europe"
+    },
+    {
+      "name": "Slovenia",
+      "code": "SI",
+      "capital": "Ljubljana",
+      "language": "Slovenian",
+      "hello": "Pozdravljeni",
+      "flag": "🇸🇮",
+      "continent": "Europe"
+    },
+    {
+      "name": "South Africa",
+      "code": "ZA",
+      "capital": "Cape Town",
+      "language": "Afrikaans/English",
+      "hello": "Hallo/Hello",
+      "flag": "🇿🇦",
+      "continent": "Africa"
+    },
+    {
+      "name": "South Korea",
+      "code": "KR",
+      "capital": "Seoul",
+      "language": "Korean",
+      "hello": "안녕하세요 (Annyeonghaseyo)",
+      "flag": "🇰🇷",
+      "continent": "Asia"
+    },
+    {
+      "name": "Spain",
+      "code": "ES",
+      "capital": "Madrid",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇪🇸",
+      "continent": "Europe"
+    },
+    {
+      "name": "Sri Lanka",
+      "code": "LK",
+      "capital": "Colombo",
+      "language": "Sinhala/Tamil",
+      "hello": "ආයුබෝවන් (Ayubowan)",
+      "flag": "🇱🇰",
+      "continent": "Asia"
+    },
+    {
+      "name": "Sweden",
+      "code": "SE",
+      "capital": "Stockholm",
+      "language": "Swedish",
+      "hello": "Hej",
+      "flag": "🇸🇪",
+      "continent": "Europe"
+    },
+    {
+      "name": "Switzerland",
+      "code": "CH",
+      "capital": "Bern",
+      "language": "German/French/Italian",
+      "hello": "Hallo/Bonjour/Ciao",
+      "flag": "🇨🇭",
+      "continent": "Europe"
+    },
+    {
+      "name": "Taiwan",
+      "code": "TW",
+      "capital": "Taipei",
+      "language": "Mandarin Chinese",
+      "hello": "你好 (Nǐ hǎo)",
+      "flag": "🇹🇼",
+      "continent": "Asia"
+    },
+    {
+      "name": "Thailand",
+      "code": "TH",
+      "capital": "Bangkok",
+      "language": "Thai",
+      "hello": "สวัสดี (Sawasdee)",
+      "flag": "🇹🇭",
+      "continent": "Asia"
+    },
+    {
+      "name": "Turkey",
+      "code": "TR",
+      "capital": "Ankara",
+      "language": "Turkish",
+      "hello": "Merhaba",
+      "flag": "🇹🇷",
+      "continent": "Europe/Asia"
+    },
+    {
+      "name": "Ukraine",
+      "code": "UA",
+      "capital": "Kyiv",
+      "language": "Ukrainian",
+      "hello": "Привіт (Pryvit)",
+      "flag": "🇺🇦",
+      "continent": "Europe"
+    },
+    {
+      "name": "United Arab Emirates",
+      "code": "AE",
+      "capital": "Abu Dhabi",
+      "language": "Arabic",
+      "hello": "مرحبا (Marhaban)",
+      "flag": "🇦🇪",
+      "continent": "Asia"
+    },
+    {
+      "name": "United Kingdom",
+      "code": "GB",
+      "capital": "London",
+      "language": "English",
+      "hello": "Hello",
+      "flag": "🇬🇧",
+      "continent": "Europe"
+    },
+    {
+      "name": "United States",
+      "code": "US",
+      "capital": "Washington D.C.",
+      "language": "English",
+      "hello": "Hello",
+      "flag": "🇺🇸",
+      "continent": "North America"
+    },
+    {
+      "name": "Uruguay",
+      "code": "UY",
+      "capital": "Montevideo",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇺🇾",
+      "continent": "South America"
+    },
+    {
+      "name": "Uzbekistan",
+      "code": "UZ",
+      "capital": "Tashkent",
+      "language": "Uzbek",
+      "hello": "Salom",
+      "flag": "🇺🇿",
+      "continent": "Asia"
+    },
+    {
+      "name": "Venezuela",
+      "code": "VE",
+      "capital": "Caracas",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇻🇪",
+      "continent": "South America"
+    },
+    {
+      "name": "Vietnam",
+      "code": "VN",
+      "capital": "Hanoi",
+      "language": "Vietnamese",
+      "hello": "Xin chào",
+      "flag": "🇻🇳",
+      "continent": "Asia"
+    },
+    {
+      "name": "Yemen",
+      "code": "YE",
+      "capital": "Sana'a",
+      "language": "Arabic",
+      "hello": "مرحبا (Marhaban)",
+      "flag": "🇾🇪",
+      "continent": "Asia"
+    },
+    {
+      "name": "Zimbabwe",
+      "code": "ZW",
+      "capital": "Harare",
+      "language": "English",
+      "hello": "Hello",
+      "flag": "🇿🇼",
+      "continent": "Africa"
+    },
+    {
+      "name": "Luxembourg",
+      "code": "LU",
+      "capital": "Luxembourg",
+      "language": "Luxembourgish",
+      "hello": "Moien",
+      "flag": "🇱🇺",
+      "continent": "Europe"
+    },
+    {
+      "name": "Malta",
+      "code": "MT",
+      "capital": "Valletta",
+      "language": "Maltese",
+      "hello": "Bonġu",
+      "flag": "🇲🇹",
+      "continent": "Europe"
+    },
+    {
+      "name": "Cyprus",
+      "code": "CY",
+      "capital": "Nicosia",
+      "language": "Greek/Turkish",
+      "hello": "Γεια σας (Yia sas)/Merhaba",
+      "flag": "🇨🇾",
+      "continent": "Europe"
+    },
+    {
+      "name": "Madagascar",
+      "code": "MG",
+      "capital": "Antananarivo",
+      "language": "Malagasy",
+      "hello": "Manao ahoana",
+      "flag": "🇲🇬",
+      "continent": "Africa"
+    },
+    {
+      "name": "Mauritius",
+      "code": "MU",
+      "capital": "Port Louis",
+      "language": "English/French",
+      "hello": "Hello/Bonjour",
+      "flag": "🇲🇺",
+      "continent": "Africa"
+    },
+    {
+      "name": "Seychelles",
+      "code": "SC",
+      "capital": "Victoria",
+      "language": "English/French",
+      "hello": "Hello/Bonjour",
+      "flag": "🇸🇨",
+      "continent": "Africa"
+    },
+    {
+      "name": "Maldives",
+      "code": "MV",
+      "capital": "Malé",
+      "language": "Dhivehi",
+      "hello": "ައްސަލާމު ޢަލައިކުމް (As-salāmu ʿalaykum)",
+      "flag": "🇲🇻",
+      "continent": "Asia"
+    },
+    {
+      "name": "Bhutan",
+      "code": "BT",
+      "capital": "Thimphu",
+      "language": "Dzongkha",
+      "hello": "བཀྲ་ཤིས་བདེ་ལེགས (Tashi delek)",
+      "flag": "🇧🇹",
+      "continent": "Asia"
+    },
+    {
+      "name": "Brunei",
+      "code": "BN",
+      "capital": "Bandar Seri Begawan",
+      "language": "Malay",
+      "hello": "Selamat pagi",
+      "flag": "🇧🇳",
+      "continent": "Asia"
+    },
+    {
+      "name": "Laos",
+      "code": "LA",
+      "capital": "Vientiane",
+      "language": "Lao",
+      "hello": "ສະບາຍດີ (Sabaidee)",
+      "flag": "🇱🇦",
+      "continent": "Asia"
+    },
+    {
+      "name": "Myanmar",
+      "code": "MM",
+      "capital": "Naypyidaw",
+      "language": "Burmese",
+      "hello": "မင်္ဂလာပါ (Mingalaba)",
+      "flag": "🇲🇲",
+      "continent": "Asia"
+    },
+    {
+      "name": "Fiji",
+      "code": "FJ",
+      "capital": "Suva",
+      "language": "English/Fijian",
+      "hello": "Bula",
+      "flag": "🇫🇯",
+      "continent": "Oceania"
+    },
+    {
+      "name": "Papua New Guinea",
+      "code": "PG",
+      "capital": "Port Moresby",
+      "language": "English",
+      "hello": "Hello",
+      "flag": "🇵🇬",
+      "continent": "Oceania"
+    },
+    {
+      "name": "Samoa",
+      "code": "WS",
+      "capital": "Apia",
+      "language": "Samoan",
+      "hello": "Talofa",
+      "flag": "🇼🇸",
+      "continent": "Oceania"
+    },
+    {
+      "name": "Tonga",
+      "code": "TO",
+      "capital": "Nuku'alofa",
+      "language": "Tongan",
+      "hello": "Mālō e lelei",
+      "flag": "🇹🇴",
+      "continent": "Oceania"
+    },
+    {
+      "name": "Vanuatu",
+      "code": "VU",
+      "capital": "Port Vila",
+      "language": "Bislama",
+      "hello": "Halo",
+      "flag": "🇻🇺",
+      "continent": "Oceania"
+    },
+    {
+      "name": "Jamaica",
+      "code": "JM",
+      "capital": "Kingston",
+      "language": "English",
+      "hello": "Hello",
+      "flag": "🇯🇲",
+      "continent": "North America"
+    },
+    {
+      "name": "Costa Rica",
+      "code": "CR",
+      "capital": "San José",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇨🇷",
+      "continent": "North America"
+    },
+    {
+      "name": "Guatemala",
+      "code": "GT",
+      "capital": "Guatemala City",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇬🇹",
+      "continent": "North America"
+    },
+    {
+      "name": "Honduras",
+      "code": "HN",
+      "capital": "Tegucigalpa",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇭🇳",
+      "continent": "North America"
+    },
+    {
+      "name": "Nicaragua",
+      "code": "NI",
+      "capital": "Managua",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇳🇮",
+      "continent": "North America"
+    },
+    {
+      "name": "Panama",
+      "code": "PA",
+      "capital": "Panama City",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇵🇦",
+      "continent": "North America"
+    },
+    {
+      "name": "El Salvador",
+      "code": "SV",
+      "capital": "San Salvador",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇸🇻",
+      "continent": "North America"
+    },
+    {
+      "name": "Belize",
+      "code": "BZ",
+      "capital": "Belmopan",
+      "language": "English",
+      "hello": "Hello",
+      "flag": "🇧🇿",
+      "continent": "North America"
+    },
+    {
+      "name": "Cuba",
+      "code": "CU",
+      "capital": "Havana",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇨🇺",
+      "continent": "North America"
+    },
+    {
+      "name": "Dominican Republic",
+      "code": "DO",
+      "capital": "Santo Domingo",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇩🇴",
+      "continent": "North America"
+    },
+    {
+      "name": "Haiti",
+      "code": "HT",
+      "capital": "Port-au-Prince",
+      "language": "French/Haitian Creole",
+      "hello": "Bonjou",
+      "flag": "🇭🇹",
+      "continent": "North America"
+    },
+    {
+      "name": "Ecuador",
+      "code": "EC",
+      "capital": "Quito",
+      "language": "Spanish",
+      "hello": "Hola",
+      "flag": "🇪🇨",
+      "continent": "South America"
+    },
+    {
+      "name": "Paraguay",
+      "code": "PY",
+      "capital": "Asunción",
+      "language": "Spanish/Guaraní",
+      "hello": "Hola/Mba'éichapa",
+      "flag": "🇵🇾",
+      "continent": "South America"
+    },
+    {
+      "name": "Guyana",
+      "code": "GY",
+      "capital": "Georgetown",
+      "language": "English",
+      "hello": "Hello",
+      "flag": "🇬🇾",
+      "continent": "South America"
+    },
+    {
+      "name": "Suriname",
+      "code": "SR",
+      "capital": "Paramaribo",
+      "language": "Dutch",
+      "hello": "Hallo",
+      "flag": "🇸🇷",
+      "continent": "South America"
+    },
+    {
+      "name": "French Guiana",
+      "code": "GF",
+      "capital": "Cayenne",
+      "language": "French",
+      "hello": "Bonjour",
+      "flag": "🇬🇫",
+      "continent": "South America"
+    }
+  ],
+  "meta": {
+    "totalCountries": 110,
+    "lastUpdated": "2024-10-08",
+    "version": "1.0"
+  }
+}

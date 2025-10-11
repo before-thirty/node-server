@@ -24,6 +24,8 @@ import {
   fetchGoogleMapsImage,
 } from "./helpers/googlemaps";
 import { z } from "zod";
+import fs from "fs";
+import path from "path";
 
 // Type definitions for demo data structure
 interface DemoDataPin {
@@ -118,6 +120,7 @@ app.use(morgan("dev"));
 app.use("/api", pocRoutes); // POC semantic search routes
 app.use("/cron", cronRoutes);
 app.use("/api/moderation", moderationRoutes);
+
 // app.use(
 //   "/.well-known",
 //   express.static(path.join(process.cwd(), ".well-known"))
@@ -3897,93 +3900,44 @@ app.post(
         },
       };
 
-      // Country coordinates and flags lookup
-      const countryData: {
-        [key: string]: { lat: number; lng: number; flag: string };
-      } = {
-        France: { lat: 46.2276, lng: 2.2137, flag: "🇫🇷" },
-        Spain: { lat: 40.4637, lng: -3.7492, flag: "🇪🇸" },
-        "United States": { lat: 37.0902, lng: -95.7129, flag: "🇺🇸" },
-        China: { lat: 35.8617, lng: 104.1954, flag: "🇨🇳" },
-        Italy: { lat: 41.8719, lng: 12.5674, flag: "🇮🇹" },
-        Turkey: { lat: 38.9637, lng: 35.2433, flag: "🇹🇷" },
-        Mexico: { lat: 23.6345, lng: -102.5528, flag: "🇲🇽" },
-        Thailand: { lat: 15.87, lng: 100.9925, flag: "🇹🇭" },
-        Germany: { lat: 51.1657, lng: 10.4515, flag: "🇩🇪" },
-        "United Kingdom": { lat: 55.3781, lng: -3.436, flag: "🇬🇧" },
-        Japan: { lat: 36.2048, lng: 138.2529, flag: "🇯🇵" },
-        Austria: { lat: 47.5162, lng: 14.5501, flag: "🇦🇹" },
-        Greece: { lat: 39.0742, lng: 21.8243, flag: "🇬🇷" },
-        Malaysia: { lat: 4.2105, lng: 101.9758, flag: "🇲🇾" },
-        Russia: { lat: 61.524, lng: 105.3188, flag: "🇷🇺" },
-        Canada: { lat: 56.1304, lng: -106.3468, flag: "🇨🇦" },
-        Poland: { lat: 51.9194, lng: 19.1451, flag: "🇵🇱" },
-        Netherlands: { lat: 52.1326, lng: 5.2913, flag: "🇳🇱" },
-        Ukraine: { lat: 48.3794, lng: 31.1656, flag: "🇺🇦" },
-        Hungary: { lat: 47.1625, lng: 19.5033, flag: "🇭🇺" },
-        Portugal: { lat: 39.3999, lng: -8.2245, flag: "🇵🇹" },
-        "Saudi Arabia": { lat: 23.8859, lng: 45.0792, flag: "🇸🇦" },
-        Croatia: { lat: 45.1, lng: 15.2, flag: "🇭🇷" },
-        Egypt: { lat: 26.0975, lng: 31.1394, flag: "🇪🇬" },
-        Morocco: { lat: 31.7917, lng: -7.0926, flag: "🇲🇦" },
-        "Czech Republic": { lat: 49.8175, lng: 15.473, flag: "🇨🇿" },
-        "South Korea": { lat: 35.9078, lng: 127.7669, flag: "🇰🇷" },
-        Indonesia: { lat: -0.7893, lng: 113.9213, flag: "🇮🇩" },
-        India: { lat: 20.5937, lng: 78.9629, flag: "🇮🇳" },
-        Vietnam: { lat: 14.0583, lng: 108.2772, flag: "🇻🇳" },
-        Chile: { lat: -35.6751, lng: -71.543, flag: "🇨🇱" },
-        Singapore: { lat: 1.3521, lng: 103.8198, flag: "🇸🇬" },
-        Philippines: { lat: 12.8797, lng: 121.774, flag: "🇵🇭" },
-        "South Africa": { lat: -30.5595, lng: 22.9375, flag: "🇿🇦" },
-        Argentina: { lat: -38.4161, lng: -63.6167, flag: "🇦🇷" },
-        Sweden: { lat: 60.1282, lng: 18.6435, flag: "🇸🇪" },
-        Belgium: { lat: 50.5039, lng: 4.4699, flag: "🇧🇪" },
-        Norway: { lat: 60.472, lng: 8.4689, flag: "🇳🇴" },
-        Ireland: { lat: 53.4129, lng: -8.2439, flag: "🇮🇪" },
-        Jordan: { lat: 30.5852, lng: 36.2384, flag: "🇯🇴" },
-        Australia: { lat: -25.2744, lng: 133.7751, flag: "🇦🇺" },
-        Israel: { lat: 31.0461, lng: 34.8516, flag: "🇮🇱" },
-        "United Arab Emirates": { lat: 23.4241, lng: 53.8478, flag: "🇦🇪" },
-        Denmark: { lat: 56.2639, lng: 9.5018, flag: "🇩🇰" },
-        Finland: { lat: 61.9241, lng: 25.7482, flag: "🇫🇮" },
-        Bulgaria: { lat: 42.7339, lng: 25.4858, flag: "🇧🇬" },
-        Tunisia: { lat: 33.8869, lng: 9.5375, flag: "🇹🇳" },
-        "New Zealand": { lat: -40.9006, lng: 174.886, flag: "🇳🇿" },
-        Brazil: { lat: -14.235, lng: -51.9253, flag: "🇧🇷" },
-        Switzerland: { lat: 46.8182, lng: 8.2275, flag: "🇨🇭" },
-      };
-
-      // Get country coordinates and flag
-      const countryInfo = countryData[country];
-
+      // Load countries data from JSON file
+      const countriesPath = path.join(__dirname, "..", "data", "countries.json");
+      const countriesData = JSON.parse(fs.readFileSync(countriesPath, "utf8"));
+      
+      // Find the requested country in the JSON data
+      const countryInfo = countriesData.countries.find((c: any) => c.name === country);
+      
       if (!countryInfo) {
+        const availableCountries = countriesData.countries.map((c: any) => c.name).slice(0, 10);
         res.status(400).json({
-          error: `Unsupported country: ${country}. Please use a supported country name.`,
+          error: `Unsupported country: ${country}. Country not found in countries.json.`,
+          availableCountries: availableCountries,
+          totalCountries: countriesData.countries.length,
+          message: `Please use one of the ${countriesData.countries.length} supported countries.`
         });
         return;
       }
 
-      // Generate a country ID from the country name (simple approach)
-      const countryId = country.substring(0, 2).toUpperCase();
+
 
       // Store or update country demo data
       const countryDemoData = await prisma.countryDemoData.upsert({
         where: { countryName: country },
         update: {
-          countryId: countryId,
+          countryId: countryInfo.code,
           url: content.url,
           demoData,
-          lat: countryInfo.lat,
-          lng: countryInfo.lng,
+          lat: 0, // Default coordinates - can be updated later
+          lng: 0,
           flag: countryInfo.flag,
         },
         create: {
           countryName: country,
-          countryId: countryId,
+          countryId: countryInfo.code,
           url: content.url,
           demoData,
-          lat: countryInfo.lat,
-          lng: countryInfo.lng,
+          lat: 0, // Default coordinates - can be updated later  
+          lng: 0,
           flag: countryInfo.flag,
         },
       });
@@ -3996,6 +3950,11 @@ app.post(
           id: countryDemoData.id,
           countryName: countryDemoData.countryName,
           countryId: countryDemoData.countryId,
+          countryCode: countryInfo.code,
+          flag: countryInfo.flag,
+          hello: countryInfo.hello,
+          capital: countryInfo.capital,
+          language: countryInfo.language,
           url: countryDemoData.url,
         },
       });

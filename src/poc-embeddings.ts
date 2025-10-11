@@ -478,3 +478,241 @@ export async function getEmbeddingStats(): Promise<any> {
     percentageComplete: ((Number((withAnyEmbedding as any)[0]?.count || 0) / totalContent) * 100).toFixed(1)
   };
 }
+
+/**
+ * Get all pins from semantic search results
+ * @param semanticResults - Results from semantic search on content
+ * @param query - Search query for logging
+ * @returns Array of pins with semantic scores
+ */
+export async function getPinsFromSemanticResults(
+  semanticResults: any[],
+  query: string
+): Promise<any[]> {
+  try {
+    if (!semanticResults || semanticResults.length === 0) {
+      return [];
+    }
+
+    console.log(`📍 Getting pins from ${semanticResults.length} semantic content matches`);
+    
+    // Get all pins for the matching content IDs
+    const contentIds = semanticResults.map(result => result.id);
+    
+    const pinsQuery = `
+      SELECT 
+        p.id as pin_id,
+        p."contentId",
+        p.name as pin_name,
+        c."rawData",
+        c.title as content_title,
+        0.3 as base_score,
+        'semantic' as match_type
+      FROM app_data."Pin" p
+      INNER JOIN app_data."Content" c ON p."contentId" = c.id
+      WHERE p."contentId" = ANY($1)
+      ORDER BY p."createdAt" DESC
+    `;
+
+    const pins = await prismaPoc.$queryRawUnsafe(pinsQuery, contentIds);
+    
+    // Enhance pins with semantic scores from their parent content
+    const enhancedPins = (pins as any[]).map(pin => {
+      const parentContent = semanticResults.find(content => content.id === pin.contentId);
+      const semanticScore = parentContent ? Math.max(
+        parentContent.title_similarity || 0,
+        parentContent.raw_data_similarity || 0,
+        parentContent.user_notes_similarity || 0,
+        parentContent.structured_data_similarity || 0
+      ) : 0.3;
+      
+      return {
+        ...pin,
+        similarity_score: Math.max(0.3, semanticScore), // Ensure minimum semantic score
+        match_type: 'semantic'
+      };
+    });
+
+    console.log(`📍 Found ${enhancedPins.length} pins from semantic results`);
+    return enhancedPins;
+    
+  } catch (error) {
+    console.error('❌ Error getting pins from semantic results:', error);
+    return [];
+  }
+}
+
+/**
+ * Text-based search for Pin names using PostgreSQL trigram similarity and ILIKE
+ * @param query - Search query (e.g., "Pizza Hut", "McDonald's")
+ * @param userId - Optional user ID filter
+ * @param tripId - Optional trip ID filter
+ * @param limit - Maximum results to return (default 10)
+ * @returns Array of matching pins with similarity scores
+ */
+export async function searchPinNames(
+  query: string,
+  userId?: string,
+  tripId?: string,
+  limit: number = 10
+): Promise<any[]> {
+  try {
+    console.log(`🔍 Text search for pin names: "${query}"`);
+    
+    if (!query || query.trim() === '') {
+      return [];
+    }
+
+    // Build the WHERE clause for content filtering
+    let contentWhereClause = '1=1';
+    const params: any[] = [];
+    
+    if (userId) {
+      contentWhereClause += ` AND c."userId" = $${params.length + 1}`;
+      params.push(userId);
+    }
+    
+    if (tripId) {
+      contentWhereClause += ` AND c."tripId" = $${params.length + 1}`;
+      params.push(tripId);
+    }
+
+    // Add query parameter
+    params.push(query.trim());
+    params.push(`%${query.trim()}%`); // For ILIKE
+    params.push(limit);
+
+    // Search using both trigram similarity and ILIKE for comprehensive matching
+    const searchQuery = `
+      WITH pin_matches AS (
+        SELECT 
+          p.id as pin_id,
+          p.name as pin_name,
+          p."contentId",
+          c.title,
+          c.thumbnail,
+          c."tripId",
+          c."userId",
+          c."createdAt",
+          c."rawData",
+          -- Calculate trigram similarity (requires pg_trgm extension)
+          CASE 
+            WHEN public.similarity(p.name, $${params.length - 2}) > 0.3 
+            THEN public.similarity(p.name, $${params.length - 2})
+            ELSE 0
+          END as trigram_similarity,
+          -- ILIKE match gets high score
+          CASE 
+            WHEN p.name ILIKE $${params.length - 1}
+            THEN 0.95
+            ELSE 0
+          END as ilike_score
+        FROM app_data."Pin" p
+        INNER JOIN app_data."Content" c ON p."contentId" = c.id
+        WHERE ${contentWhereClause}
+          AND (
+            p.name ILIKE $${params.length - 1}
+            OR public.similarity(p.name, $${params.length - 2}) > 0.3
+          )
+      )
+      SELECT 
+        pin_id,
+        pin_name,
+        "contentId",
+        title,
+        thumbnail,
+        "tripId", 
+        "userId",
+        "createdAt",
+        "rawData",
+        GREATEST(trigram_similarity, ilike_score) as similarity_score,
+        'pin_name' as match_type
+      FROM pin_matches
+      WHERE GREATEST(trigram_similarity, ilike_score) > 0
+      ORDER BY similarity_score DESC, "createdAt" DESC
+      LIMIT $${params.length}
+    `;
+
+    console.log('🔍 Executing pin name search query:', {
+      query: query.trim(),
+      userId,
+      tripId,
+      limit
+    });
+
+    const results = await prismaPoc.$queryRawUnsafe(searchQuery, ...params);
+    
+    console.log(`📊 Found ${(results as any[]).length} pin name matches`);
+    return results as any[];
+    
+  } catch (error) {
+    console.error('❌ Error performing pin name search:', error);
+    // Fallback to simple ILIKE search if trigram extension is not available
+    return await fallbackPinNameSearch(query, userId, tripId, limit);
+  }
+}
+
+/**
+ * Fallback pin name search using only ILIKE (no trigram extension required)
+ */
+async function fallbackPinNameSearch(
+  query: string,
+  userId?: string,
+  tripId?: string,
+  limit: number = 10
+): Promise<any[]> {
+  try {
+    console.log(`🔄 Fallback pin name search: "${query}"`);
+
+    let contentWhereClause = '1=1';
+    const params: any[] = [];
+    
+    if (userId) {
+      contentWhereClause += ` AND c."userId" = $${params.length + 1}`;
+      params.push(userId);
+    }
+    
+    if (tripId) {
+      contentWhereClause += ` AND c."tripId" = $${params.length + 1}`;
+      params.push(tripId);
+    }
+
+    params.push(`%${query.trim()}%`);
+    params.push(limit);
+
+    const fallbackQuery = `
+      SELECT 
+        p.id as pin_id,
+        p.name as pin_name,
+        p."contentId",
+        c.title,
+        c.thumbnail,
+        c."tripId",
+        c."userId", 
+        c."createdAt",
+        c."rawData",
+        0.8 as similarity_score,
+        'pin_name_fallback' as match_type
+      FROM app_data."Pin" p
+      INNER JOIN app_data."Content" c ON p."contentId" = c.id
+      WHERE ${contentWhereClause}
+        AND p.name ILIKE $${params.length - 1}
+      ORDER BY 
+        CASE 
+          WHEN LOWER(p.name) = LOWER($${params.length - 1}) THEN 1
+          WHEN LOWER(p.name) LIKE LOWER($${params.length - 1}) THEN 2
+          ELSE 3
+        END,
+        c."createdAt" DESC
+      LIMIT $${params.length}
+    `;
+
+    const results = await prismaPoc.$queryRawUnsafe(fallbackQuery, ...params);
+    console.log(`📊 Fallback search found ${(results as any[]).length} results`);
+    return results as any[];
+    
+  } catch (error) {
+    console.error('❌ Error in fallback pin name search:', error);
+    return [];
+  }
+}
