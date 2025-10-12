@@ -108,6 +108,7 @@ import {
   sendPinAddedNotifications,
 } from "./services/notificationService";
 import { emitContentProcessingStatus } from "./services/websocketService";
+import { getYoutubeMetadata, getYouTubeVideoId } from "./helpers/googleApis";
 
 const prisma = new PrismaClient();
 
@@ -586,7 +587,7 @@ const processContentAnalysisAsync = async (
     // Determine if external API calls are needed (skip for demo trips)
     const needsExternalAPI =
       !shouldSkipProcessing &&
-      (url.includes("instagram.com") || url.includes("tiktok.com"));
+      (url.includes("instagram.com") || url.includes("tiktok.com") || url.includes("youtube") ||  url.includes("youtu.be"));
 
     // Fire external API calls without waiting for response if needed
     if (!shouldSkipProcessing && url.includes("instagram.com") ||  url.includes("youtube") ||  url.includes("youtu.be")) {
@@ -597,7 +598,7 @@ const processContentAnalysisAsync = async (
         body: JSON.stringify({ contentId: contentId, url: url }),
       }).catch((error) => {
         console.error(
-          `Failed to call Instagram analysis API for content ${contentId}:`,
+          `Failed to call Instagram / Tiktok analysis API for content ${contentId}:`,
           error
         );
       });
@@ -907,12 +908,12 @@ app.post(
             );
             description = metadata?.og.title ?? "";
           } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
-            req.logger?.debug("YouTube URL detected, analyzing content...");
-            const title = metadata?.meta?.title;
-            const desc = metadata?.meta?.description;
-            console.log("Title", title)
-            console.log("Description", desc)
-            if (title && desc) {
+            const videoId = getYouTubeVideoId(url)
+            req.logger?.debug(`YouTube URL detected, analyzing content for ${videoId}`);
+            
+            const {title, description: desc} =  videoId ? await getYoutubeMetadata(videoId) : {title: null, description: ""}
+
+            if (title || desc) {
               const isTravelContent = await analyzeYouTubeContent(
                 title,
                 desc,
