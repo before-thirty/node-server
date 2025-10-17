@@ -1001,7 +1001,7 @@ app.post(
       if (!description) {
         req.logger?.error(`Failed to fetch metadata for URL - ${url}`);
       }
-
+      
       // Create a DB entry for content
       const newContent = await createContent(
         url,
@@ -1010,6 +1010,7 @@ app.post(
         trip_id,
         user_notes,
         contentThumbnail
+
       );
 
       console.log(
@@ -2897,6 +2898,9 @@ app.post(
 
       // Step 6: Update content with title and pin count
       await updateContent(newContent.id, [], manualContentTitle, 1);
+      
+
+      
 
       // Step 7: Create Pin linked to PlaceCache
       const coordinates = { lat: placeCache.lat, lng: placeCache.lng };
@@ -2913,6 +2917,8 @@ app.post(
       req.logger?.info(
         `Created manual pin - ${pin.id} with content_id - ${newContent.id} and place_id - ${placeCache.id}`
       );
+
+      const updatedContent = await updateContentStatus(newContent.id, "COMPLETED");
 
       // Step 7: Respond with the created data
       res.status(200).json({
