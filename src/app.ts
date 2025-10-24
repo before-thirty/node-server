@@ -3926,18 +3926,44 @@ app.post(
         update: {
           countryId: countryInfo.code,
           url: content.url,
-          demoData,
-          lat: 0, // Default coordinates - can be updated later
-          lng: 0,
+          demoData: {
+            ...demoData,
+            countryInfo: {
+              name: countryInfo.name,
+              code: countryInfo.code,
+              capital: countryInfo.capital,
+              language: countryInfo.language,
+              hello: countryInfo.hello,
+              flag: countryInfo.flag,
+              continent: countryInfo.continent,
+              lat: countryInfo.lat || 0,
+              lng: countryInfo.lng || 0,
+            }
+          },
+          lat: countryInfo.lat || 0,
+          lng: countryInfo.lng || 0,
           flag: countryInfo.flag,
         },
         create: {
           countryName: country,
           countryId: countryInfo.code,
           url: content.url,
-          demoData,
-          lat: 0, // Default coordinates - can be updated later  
-          lng: 0,
+          demoData: {
+            ...demoData,
+            countryInfo: {
+              name: countryInfo.name,
+              code: countryInfo.code,
+              capital: countryInfo.capital,
+              language: countryInfo.language,
+              hello: countryInfo.hello,
+              flag: countryInfo.flag,
+              continent: countryInfo.continent,
+              lat: countryInfo.lat || 0,
+              lng: countryInfo.lng || 0,
+            }
+          },
+          lat: countryInfo.lat || 0,
+          lng: countryInfo.lng || 0,
           flag: countryInfo.flag,
         },
       });
@@ -3988,17 +4014,27 @@ app.get(
       });
 
       // Format for country selection page
-      const formattedCountries = countries.map((country: any) => ({
-        name: country.countryName,
-        id: country.id, // Use the UUID as id
-        countryId: country.countryId, // Also include countryId separately
-        url: country.url,
-        hasDemo: true,
-        demoData: country.demoData,
-        lat: country.lat,
-        lng: country.lng,
-        flag: country.flag,
-      }));
+      const formattedCountries = countries.map((country: any) => {
+        // Extract countryInfo from demoData if available
+        const countryInfo = country.demoData?.countryInfo || {};
+        
+        return {
+          name: country.countryName,
+          id: country.id, // Use the UUID as id
+          countryId: country.countryId, // Also include countryId separately
+          url: country.url,
+          hasDemo: true,
+          demoData: country.demoData,
+          lat: country.lat,
+          lng: country.lng,
+          flag: country.flag,
+          // Add greeting/hello from countryInfo
+          greeting: countryInfo.hello || "Hello",
+          language: countryInfo.language || "English",
+          capital: countryInfo.capital || "",
+          continent: countryInfo.continent || "",
+        };
+      });
 
       res.status(200).json({
         success: true,

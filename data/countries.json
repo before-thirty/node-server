@@ -7,7 +7,9 @@
       "language": "Pashto/Dari",
       "hello": "سلام (Salām)",
       "flag": "🇦🇫",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 33.9391,
+      "lng": 67.7100
     },
     {
       "name": "Albania",
@@ -16,7 +18,9 @@
       "language": "Albanian",
       "hello": "Përshëndetje",
       "flag": "🇦🇱",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 41.1533,
+      "lng": 20.1683
     },
     {
       "name": "Algeria",
@@ -25,7 +29,9 @@
       "language": "Arabic",
       "hello": "مرحبا (Marhaban)",
       "flag": "🇩🇿",
-      "continent": "Africa"
+      "continent": "Africa",
+      "lat": 28.0339,
+      "lng": 1.6596
     },
     {
       "name": "Argentina",
@@ -34,7 +40,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇦🇷",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": -38.4161,
+      "lng": -63.6167
     },
     {
       "name": "Armenia",
@@ -43,7 +51,9 @@
       "language": "Armenian",
       "hello": "Բարև (Barev)",
       "flag": "🇦🇲",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 40.0691,
+      "lng": 45.0382
     },
     {
       "name": "Australia",
@@ -52,7 +62,9 @@
       "language": "English",
       "hello": "Hello",
       "flag": "🇦🇺",
-      "continent": "Oceania"
+      "continent": "Oceania",
+      "lat": -25.2744,
+      "lng": 133.7751
     },
     {
       "name": "Austria",
@@ -61,7 +73,9 @@
       "language": "German",
       "hello": "Hallo",
       "flag": "🇦🇹",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 47.5162,
+      "lng": 14.5501
     },
     {
       "name": "Azerbaijan",
@@ -70,7 +84,9 @@
       "language": "Azerbaijani",
       "hello": "Salam",
       "flag": "🇦🇿",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 40.1431,
+      "lng": 47.5769
     },
     {
       "name": "Bangladesh",
@@ -79,7 +95,9 @@
       "language": "Bengali",
       "hello": "নমস্কার (Nomoshkar)",
       "flag": "🇧🇩",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 23.6850,
+      "lng": 90.3563
     },
     {
       "name": "Belarus",
@@ -88,7 +106,9 @@
       "language": "Belarusian",
       "hello": "Прывітанне (Pryvitanne)",
       "flag": "🇧🇾",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 53.7098,
+      "lng": 27.9534
     },
     {
       "name": "Belgium",
@@ -97,7 +117,9 @@
       "language": "Dutch/French",
       "hello": "Hallo/Bonjour",
       "flag": "🇧🇪",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 50.5039,
+      "lng": 4.4699
     },
     {
       "name": "Bolivia",
@@ -106,7 +128,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇧🇴",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": -16.2902,
+      "lng": -63.5887
     },
     {
       "name": "Brazil",
@@ -115,7 +139,9 @@
       "language": "Portuguese",
       "hello": "Olá",
       "flag": "🇧🇷",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": -14.2350,
+      "lng": -51.9253
     },
     {
       "name": "Bulgaria",
@@ -124,7 +150,9 @@
       "language": "Bulgarian",
       "hello": "Здравейте (Zdraveyte)",
       "flag": "🇧🇬",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 42.7339,
+      "lng": 25.4858
     },
     {
       "name": "Cambodia",
@@ -133,7 +161,9 @@
       "language": "Khmer",
       "hello": "ជំរាបសួរ (Chum reap suor)",
       "flag": "🇰🇭",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 12.5657,
+      "lng": 104.9910
     },
     {
       "name": "Canada",
@@ -142,7 +172,9 @@
       "language": "English/French",
       "hello": "Hello/Bonjour",
       "flag": "🇨🇦",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 56.1304,
+      "lng": -106.3468
     },
     {
       "name": "Chile",
@@ -151,7 +183,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇨🇱",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": -35.6751,
+      "lng": -71.5430
     },
     {
       "name": "China",
@@ -160,7 +194,9 @@
       "language": "Mandarin Chinese",
       "hello": "你好 (Nǐ hǎo)",
       "flag": "🇨🇳",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 35.8617,
+      "lng": 104.1954
     },
     {
       "name": "Colombia",
@@ -169,7 +205,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇨🇴",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": 4.5709,
+      "lng": -74.2973
     },
     {
       "name": "Croatia",
@@ -178,7 +216,9 @@
       "language": "Croatian",
       "hello": "Bok",
       "flag": "🇭🇷",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 45.1000,
+      "lng": 15.2000
     },
     {
       "name": "Czech Republic",
@@ -187,7 +227,9 @@
       "language": "Czech",
       "hello": "Ahoj",
       "flag": "🇨🇿",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 49.7437,
+      "lng": 15.3386
     },
     {
       "name": "Denmark",
@@ -196,7 +238,9 @@
       "language": "Danish",
       "hello": "Hej",
       "flag": "🇩🇰",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 56.2639,
+      "lng": 9.5018
     },
     {
       "name": "Egypt",
@@ -205,7 +249,9 @@
       "language": "Arabic",
       "hello": "أهلا (Ahlan)",
       "flag": "🇪🇬",
-      "continent": "Africa"
+      "continent": "Africa",
+      "lat": 26.0975,
+      "lng": 30.0444
     },
     {
       "name": "Estonia",
@@ -214,7 +260,9 @@
       "language": "Estonian",
       "hello": "Tere",
       "flag": "🇪🇪",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 58.5953,
+      "lng": 25.0136
     },
     {
       "name": "Ethiopia",
@@ -223,7 +271,9 @@
       "language": "Amharic",
       "hello": "ሰላም (Selam)",
       "flag": "🇪🇹",
-      "continent": "Africa"
+      "continent": "Africa",
+      "lat": 9.1450,
+      "lng": 40.4897
     },
     {
       "name": "Finland",
@@ -232,7 +282,9 @@
       "language": "Finnish",
       "hello": "Hei",
       "flag": "🇫🇮",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 61.9241,
+      "lng": 25.7482
     },
     {
       "name": "France",
@@ -241,7 +293,9 @@
       "language": "French",
       "hello": "Bonjour",
       "flag": "🇫🇷",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 46.6034,
+      "lng": 1.8883
     },
     {
       "name": "Georgia",
@@ -250,7 +304,9 @@
       "language": "Georgian",
       "hello": "გამარჯობა (Gamarjoba)",
       "flag": "🇬🇪",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 42.3154,
+      "lng": 43.3569
     },
     {
       "name": "Germany",
@@ -259,7 +315,9 @@
       "language": "German",
       "hello": "Hallo",
       "flag": "🇩🇪",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 51.1657,
+      "lng": 10.4515
     },
     {
       "name": "Ghana",
@@ -268,7 +326,9 @@
       "language": "English",
       "hello": "Hello",
       "flag": "🇬🇭",
-      "continent": "Africa"
+      "continent": "Africa",
+      "lat": 7.9465,
+      "lng": -1.0232
     },
     {
       "name": "Greece",
@@ -277,7 +337,9 @@
       "language": "Greek",
       "hello": "Γεια σας (Yia sas)",
       "flag": "🇬🇷",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 39.0742,
+      "lng": 21.8243
     },
     {
       "name": "Hungary",
@@ -286,7 +348,9 @@
       "language": "Hungarian",
       "hello": "Szia",
       "flag": "🇭🇺",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 47.1625,
+      "lng": 19.5033
     },
     {
       "name": "Iceland",
@@ -295,7 +359,9 @@
       "language": "Icelandic",
       "hello": "Halló",
       "flag": "🇮🇸",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 64.9631,
+      "lng": -19.0208
     },
     {
       "name": "India",
@@ -304,7 +370,9 @@
       "language": "Hindi",
       "hello": "नमस्ते (Namaste)",
       "flag": "🇮🇳",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 20.5937,
+      "lng": 78.9629
     },
     {
       "name": "Indonesia",
@@ -313,7 +381,9 @@
       "language": "Indonesian",
       "hello": "Halo",
       "flag": "🇮🇩",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": -0.7893,
+      "lng": 113.9213
     },
     {
       "name": "Iran",
@@ -322,7 +392,9 @@
       "language": "Persian",
       "hello": "سلام (Salām)",
       "flag": "🇮🇷",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 32.4279,
+      "lng": 53.6880
     },
     {
       "name": "Iraq",
@@ -331,7 +403,9 @@
       "language": "Arabic",
       "hello": "مرحبا (Marhaban)",
       "flag": "🇮🇶",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 33.2232,
+      "lng": 43.6793
     },
     {
       "name": "Ireland",
@@ -340,7 +414,9 @@
       "language": "English/Irish",
       "hello": "Hello/Dia dhuit",
       "flag": "🇮🇪",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 53.4129,
+      "lng": -8.2439
     },
     {
       "name": "Israel",
@@ -349,7 +425,9 @@
       "language": "Hebrew",
       "hello": "שלום (Shalom)",
       "flag": "🇮🇱",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 31.0461,
+      "lng": 34.8516
     },
     {
       "name": "Italy",
@@ -358,7 +436,9 @@
       "language": "Italian",
       "hello": "Ciao",
       "flag": "🇮🇹",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 41.8719,
+      "lng": 12.5674
     },
     {
       "name": "Japan",
@@ -367,7 +447,9 @@
       "language": "Japanese",
       "hello": "こんにちは (Konnichiwa)",
       "flag": "🇯🇵",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 36.2048,
+      "lng": 138.2529
     },
     {
       "name": "Jordan",
@@ -376,7 +458,9 @@
       "language": "Arabic",
       "hello": "مرحبا (Marhaban)",
       "flag": "🇯🇴",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 30.5852,
+      "lng": 36.2384
     },
     {
       "name": "Kazakhstan",
@@ -385,7 +469,9 @@
       "language": "Kazakh",
       "hello": "Сәлем (Sälem)",
       "flag": "🇰🇿",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 48.0196,
+      "lng": 66.9237
     },
     {
       "name": "Kenya",
@@ -394,7 +480,9 @@
       "language": "Swahili",
       "hello": "Hujambo",
       "flag": "🇰🇪",
-      "continent": "Africa"
+      "continent": "Africa",
+      "lat": -0.0236,
+      "lng": 37.9062
     },
     {
       "name": "Latvia",
@@ -403,7 +491,9 @@
       "language": "Latvian",
       "hello": "Sveiki",
       "flag": "🇱🇻",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 56.8796,
+      "lng": 24.6032
     },
     {
       "name": "Lebanon",
@@ -412,7 +502,9 @@
       "language": "Arabic",
       "hello": "مرحبا (Marhaban)",
       "flag": "🇱🇧",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 33.8547,
+      "lng": 35.8623
     },
     {
       "name": "Lithuania",
@@ -421,7 +513,9 @@
       "language": "Lithuanian",
       "hello": "Labas",
       "flag": "🇱🇹",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 55.1694,
+      "lng": 23.8813
     },
     {
       "name": "Malaysia",
@@ -430,7 +524,9 @@
       "language": "Malay",
       "hello": "Hello/Selamat pagi",
       "flag": "🇲🇾",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 4.2105,
+      "lng": 101.9758
     },
     {
       "name": "Mexico",
@@ -439,7 +535,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇲🇽",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 23.6345,
+      "lng": -102.5528
     },
     {
       "name": "Mongolia",
@@ -448,7 +546,9 @@
       "language": "Mongolian",
       "hello": "Сайн байна уу (Sain baina uu)",
       "flag": "🇲🇳",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 46.8625,
+      "lng": 103.8467
     },
     {
       "name": "Morocco",
@@ -457,7 +557,9 @@
       "language": "Arabic",
       "hello": "السلام عليكم (As-salāmu ʿalaykum)",
       "flag": "🇲🇦",
-      "continent": "Africa"
+      "continent": "Africa",
+      "lat": 31.7917,
+      "lng": -7.0926
     },
     {
       "name": "Nepal",
@@ -466,7 +568,9 @@
       "language": "Nepali",
       "hello": "नमस्ते (Namaste)",
       "flag": "🇳🇵",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 28.3949,
+      "lng": 84.1240
     },
     {
       "name": "Netherlands",
@@ -475,7 +579,9 @@
       "language": "Dutch",
       "hello": "Hallo",
       "flag": "🇳🇱",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 52.1326,
+      "lng": 5.2913
     },
     {
       "name": "New Zealand",
@@ -484,7 +590,9 @@
       "language": "English",
       "hello": "Hello/Kia ora",
       "flag": "🇳🇿",
-      "continent": "Oceania"
+      "continent": "Oceania",
+      "lat": -40.9006,
+      "lng": 174.8860
     },
     {
       "name": "Nigeria",
@@ -493,7 +601,9 @@
       "language": "English",
       "hello": "Hello",
       "flag": "🇳🇬",
-      "continent": "Africa"
+      "continent": "Africa",
+      "lat": 9.0820,
+      "lng": 8.6753
     },
     {
       "name": "North Korea",
@@ -502,7 +612,9 @@
       "language": "Korean",
       "hello": "안녕하세요 (Annyeonghaseyo)",
       "flag": "🇰🇵",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 40.3399,
+      "lng": 127.5101
     },
     {
       "name": "Norway",
@@ -511,7 +623,9 @@
       "language": "Norwegian",
       "hello": "Hei",
       "flag": "🇳🇴",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 60.4720,
+      "lng": 8.4689
     },
     {
       "name": "Pakistan",
@@ -520,7 +634,9 @@
       "language": "Urdu",
       "hello": "آداب (Adab)",
       "flag": "🇵🇰",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 30.3753,
+      "lng": 69.3451
     },
     {
       "name": "Peru",
@@ -529,7 +645,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇵🇪",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": -9.1900,
+      "lng": -75.0152
     },
     {
       "name": "Philippines",
@@ -538,7 +656,9 @@
       "language": "Filipino",
       "hello": "Kumusta",
       "flag": "🇵🇭",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 12.8797,
+      "lng": 121.7740
     },
     {
       "name": "Poland",
@@ -547,7 +667,9 @@
       "language": "Polish",
       "hello": "Cześć",
       "flag": "🇵🇱",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 51.9194,
+      "lng": 19.1451
     },
     {
       "name": "Portugal",
@@ -556,7 +678,9 @@
       "language": "Portuguese",
       "hello": "Olá",
       "flag": "🇵🇹",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 39.3999,
+      "lng": -8.2245
     },
     {
       "name": "Romania",
@@ -565,7 +689,9 @@
       "language": "Romanian",
       "hello": "Bună",
       "flag": "🇷🇴",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 45.9432,
+      "lng": 24.9668
     },
     {
       "name": "Russia",
@@ -574,7 +700,9 @@
       "language": "Russian",
       "hello": "Привет (Privet)",
       "flag": "🇷🇺",
-      "continent": "Europe/Asia"
+      "continent": "Europe/Asia",
+      "lat": 61.5240,
+      "lng": 105.3188
     },
     {
       "name": "Saudi Arabia",
@@ -583,7 +711,9 @@
       "language": "Arabic",
       "hello": "مرحبا (Marhaban)",
       "flag": "🇸🇦",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 23.8859,
+      "lng": 45.0792
     },
     {
       "name": "Serbia",
@@ -592,7 +722,9 @@
       "language": "Serbian",
       "hello": "Здраво (Zdravo)",
       "flag": "🇷🇸",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 44.0165,
+      "lng": 21.0059
     },
     {
       "name": "Singapore",
@@ -601,7 +733,9 @@
       "language": "English/Malay/Mandarin/Tamil",
       "hello": "Hello",
       "flag": "🇸🇬",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 1.3521,
+      "lng": 103.8198
     },
     {
       "name": "Slovakia",
@@ -610,7 +744,9 @@
       "language": "Slovak",
       "hello": "Ahoj",
       "flag": "🇸🇰",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 48.6690,
+      "lng": 19.6990
     },
     {
       "name": "Slovenia",
@@ -619,7 +755,9 @@
       "language": "Slovenian",
       "hello": "Pozdravljeni",
       "flag": "🇸🇮",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 46.1512,
+      "lng": 14.9955
     },
     {
       "name": "South Africa",
@@ -628,7 +766,9 @@
       "language": "Afrikaans/English",
       "hello": "Hallo/Hello",
       "flag": "🇿🇦",
-      "continent": "Africa"
+      "continent": "Africa",
+      "lat": -30.5595,
+      "lng": 22.9375
     },
     {
       "name": "South Korea",
@@ -637,7 +777,9 @@
       "language": "Korean",
       "hello": "안녕하세요 (Annyeonghaseyo)",
       "flag": "🇰🇷",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 35.9078,
+      "lng": 127.7669
     },
     {
       "name": "Spain",
@@ -646,7 +788,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇪🇸",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 40.4637,
+      "lng": -3.7492
     },
     {
       "name": "Sri Lanka",
@@ -655,7 +799,9 @@
       "language": "Sinhala/Tamil",
       "hello": "ආයුබෝවන් (Ayubowan)",
       "flag": "🇱🇰",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 7.8731,
+      "lng": 80.7718
     },
     {
       "name": "Sweden",
@@ -664,7 +810,9 @@
       "language": "Swedish",
       "hello": "Hej",
       "flag": "🇸🇪",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 60.1282,
+      "lng": 18.6435
     },
     {
       "name": "Switzerland",
@@ -673,7 +821,9 @@
       "language": "German/French/Italian",
       "hello": "Hallo/Bonjour/Ciao",
       "flag": "🇨🇭",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 46.8182,
+      "lng": 8.2275
     },
     {
       "name": "Taiwan",
@@ -682,7 +832,9 @@
       "language": "Mandarin Chinese",
       "hello": "你好 (Nǐ hǎo)",
       "flag": "🇹🇼",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 23.6978,
+      "lng": 120.9605
     },
     {
       "name": "Thailand",
@@ -691,7 +843,9 @@
       "language": "Thai",
       "hello": "สวัสดี (Sawasdee)",
       "flag": "🇹🇭",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 15.8700,
+      "lng": 100.9925
     },
     {
       "name": "Turkey",
@@ -700,7 +854,9 @@
       "language": "Turkish",
       "hello": "Merhaba",
       "flag": "🇹🇷",
-      "continent": "Europe/Asia"
+      "continent": "Europe/Asia",
+      "lat": 38.9637,
+      "lng": 35.2433
     },
     {
       "name": "Ukraine",
@@ -709,7 +865,9 @@
       "language": "Ukrainian",
       "hello": "Привіт (Pryvit)",
       "flag": "🇺🇦",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 48.3794,
+      "lng": 31.1656
     },
     {
       "name": "United Arab Emirates",
@@ -718,7 +876,9 @@
       "language": "Arabic",
       "hello": "مرحبا (Marhaban)",
       "flag": "🇦🇪",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 23.4241,
+      "lng": 53.8478
     },
     {
       "name": "United Kingdom",
@@ -727,7 +887,9 @@
       "language": "English",
       "hello": "Hello",
       "flag": "🇬🇧",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 55.3781,
+      "lng": -3.4360
     },
     {
       "name": "United States",
@@ -736,7 +898,9 @@
       "language": "English",
       "hello": "Hello",
       "flag": "🇺🇸",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 37.0902,
+      "lng": -95.7129
     },
     {
       "name": "Uruguay",
@@ -745,7 +909,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇺🇾",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": -32.5228,
+      "lng": -55.7658
     },
     {
       "name": "Uzbekistan",
@@ -754,7 +920,9 @@
       "language": "Uzbek",
       "hello": "Salom",
       "flag": "🇺🇿",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 41.3775,
+      "lng": 64.5853
     },
     {
       "name": "Venezuela",
@@ -763,7 +931,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇻🇪",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": 6.4238,
+      "lng": -66.5897
     },
     {
       "name": "Vietnam",
@@ -772,7 +942,9 @@
       "language": "Vietnamese",
       "hello": "Xin chào",
       "flag": "🇻🇳",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 14.0583,
+      "lng": 108.2772
     },
     {
       "name": "Yemen",
@@ -781,7 +953,9 @@
       "language": "Arabic",
       "hello": "مرحبا (Marhaban)",
       "flag": "🇾🇪",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 15.5527,
+      "lng": 48.5164
     },
     {
       "name": "Zimbabwe",
@@ -790,7 +964,9 @@
       "language": "English",
       "hello": "Hello",
       "flag": "🇿🇼",
-      "continent": "Africa"
+      "continent": "Africa",
+      "lat": -19.0154,
+      "lng": 29.1549
     },
     {
       "name": "Luxembourg",
@@ -799,7 +975,9 @@
       "language": "Luxembourgish",
       "hello": "Moien",
       "flag": "🇱🇺",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 49.8153,
+      "lng": 6.1296
     },
     {
       "name": "Malta",
@@ -808,7 +986,9 @@
       "language": "Maltese",
       "hello": "Bonġu",
       "flag": "🇲🇹",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 35.9375,
+      "lng": 14.3754
     },
     {
       "name": "Cyprus",
@@ -817,7 +997,9 @@
       "language": "Greek/Turkish",
       "hello": "Γεια σας (Yia sas)/Merhaba",
       "flag": "🇨🇾",
-      "continent": "Europe"
+      "continent": "Europe",
+      "lat": 35.1264,
+      "lng": 33.4299
     },
     {
       "name": "Madagascar",
@@ -826,7 +1008,9 @@
       "language": "Malagasy",
       "hello": "Manao ahoana",
       "flag": "🇲🇬",
-      "continent": "Africa"
+      "continent": "Africa",
+      "lat": -18.7669,
+      "lng": 46.8691
     },
     {
       "name": "Mauritius",
@@ -835,7 +1019,9 @@
       "language": "English/French",
       "hello": "Hello/Bonjour",
       "flag": "🇲🇺",
-      "continent": "Africa"
+      "continent": "Africa",
+      "lat": -20.3484,
+      "lng": 57.5522
     },
     {
       "name": "Seychelles",
@@ -844,7 +1030,9 @@
       "language": "English/French",
       "hello": "Hello/Bonjour",
       "flag": "🇸🇨",
-      "continent": "Africa"
+      "continent": "Africa",
+      "lat": -4.6796,
+      "lng": 55.4920
     },
     {
       "name": "Maldives",
@@ -853,7 +1041,9 @@
       "language": "Dhivehi",
       "hello": "ައްސަލާމު ޢަލައިކުމް (As-salāmu ʿalaykum)",
       "flag": "🇲🇻",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 3.2028,
+      "lng": 73.2207
     },
     {
       "name": "Bhutan",
@@ -862,7 +1052,9 @@
       "language": "Dzongkha",
       "hello": "བཀྲ་ཤིས་བདེ་ལེགས (Tashi delek)",
       "flag": "🇧🇹",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 27.5142,
+      "lng": 90.4336
     },
     {
       "name": "Brunei",
@@ -871,7 +1063,9 @@
       "language": "Malay",
       "hello": "Selamat pagi",
       "flag": "🇧🇳",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 4.5353,
+      "lng": 114.7277
     },
     {
       "name": "Laos",
@@ -880,7 +1074,9 @@
       "language": "Lao",
       "hello": "ສະບາຍດີ (Sabaidee)",
       "flag": "🇱🇦",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 19.8563,
+      "lng": 102.4955
     },
     {
       "name": "Myanmar",
@@ -889,7 +1085,9 @@
       "language": "Burmese",
       "hello": "မင်္ဂလာပါ (Mingalaba)",
       "flag": "🇲🇲",
-      "continent": "Asia"
+      "continent": "Asia",
+      "lat": 21.9162,
+      "lng": 95.9560
     },
     {
       "name": "Fiji",
@@ -898,7 +1096,9 @@
       "language": "English/Fijian",
       "hello": "Bula",
       "flag": "🇫🇯",
-      "continent": "Oceania"
+      "continent": "Oceania",
+      "lat": -16.5780,
+      "lng": 179.4144
     },
     {
       "name": "Papua New Guinea",
@@ -907,7 +1107,9 @@
       "language": "English",
       "hello": "Hello",
       "flag": "🇵🇬",
-      "continent": "Oceania"
+      "continent": "Oceania",
+      "lat": -6.3150,
+      "lng": 143.9555
     },
     {
       "name": "Samoa",
@@ -916,7 +1118,9 @@
       "language": "Samoan",
       "hello": "Talofa",
       "flag": "🇼🇸",
-      "continent": "Oceania"
+      "continent": "Oceania",
+      "lat": -13.7590,
+      "lng": -172.1046
     },
     {
       "name": "Tonga",
@@ -925,7 +1129,9 @@
       "language": "Tongan",
       "hello": "Mālō e lelei",
       "flag": "🇹🇴",
-      "continent": "Oceania"
+      "continent": "Oceania",
+      "lat": -21.1789,
+      "lng": -175.1982
     },
     {
       "name": "Vanuatu",
@@ -934,7 +1140,9 @@
       "language": "Bislama",
       "hello": "Halo",
       "flag": "🇻🇺",
-      "continent": "Oceania"
+      "continent": "Oceania",
+      "lat": -15.3767,
+      "lng": 166.9592
     },
     {
       "name": "Jamaica",
@@ -943,7 +1151,9 @@
       "language": "English",
       "hello": "Hello",
       "flag": "🇯🇲",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 18.1096,
+      "lng": -77.2975
     },
     {
       "name": "Costa Rica",
@@ -952,7 +1162,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇨🇷",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 9.7489,
+      "lng": -83.7534
     },
     {
       "name": "Guatemala",
@@ -961,7 +1173,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇬🇹",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 15.7835,
+      "lng": -90.2308
     },
     {
       "name": "Honduras",
@@ -970,7 +1184,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇭🇳",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 15.1998,
+      "lng": -86.2419
     },
     {
       "name": "Nicaragua",
@@ -979,7 +1195,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇳🇮",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 12.8654,
+      "lng": -85.2072
     },
     {
       "name": "Panama",
@@ -988,7 +1206,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇵🇦",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 8.5380,
+      "lng": -80.7821
     },
     {
       "name": "El Salvador",
@@ -997,7 +1217,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇸🇻",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 13.7942,
+      "lng": -88.8965
     },
     {
       "name": "Belize",
@@ -1006,7 +1228,9 @@
       "language": "English",
       "hello": "Hello",
       "flag": "🇧🇿",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 17.1899,
+      "lng": -88.4976
     },
     {
       "name": "Cuba",
@@ -1015,7 +1239,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇨🇺",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 21.5218,
+      "lng": -77.7812
     },
     {
       "name": "Dominican Republic",
@@ -1024,7 +1250,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇩🇴",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 18.7357,
+      "lng": -70.1627
     },
     {
       "name": "Haiti",
@@ -1033,7 +1261,9 @@
       "language": "French/Haitian Creole",
       "hello": "Bonjou",
       "flag": "🇭🇹",
-      "continent": "North America"
+      "continent": "North America",
+      "lat": 18.9712,
+      "lng": -72.2852
     },
     {
       "name": "Ecuador",
@@ -1042,7 +1272,9 @@
       "language": "Spanish",
       "hello": "Hola",
       "flag": "🇪🇨",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": -1.8312,
+      "lng": -78.1834
     },
     {
       "name": "Paraguay",
@@ -1051,7 +1283,9 @@
       "language": "Spanish/Guaraní",
       "hello": "Hola/Mba'éichapa",
       "flag": "🇵🇾",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": -23.4425,
+      "lng": -58.4438
     },
     {
       "name": "Guyana",
@@ -1060,7 +1294,9 @@
       "language": "English",
       "hello": "Hello",
       "flag": "🇬🇾",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": 4.8604,
+      "lng": -58.9302
     },
     {
       "name": "Suriname",
@@ -1069,7 +1305,9 @@
       "language": "Dutch",
       "hello": "Hallo",
       "flag": "🇸🇷",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": 3.9193,
+      "lng": -56.0278
     },
     {
       "name": "French Guiana",
@@ -1078,7 +1316,9 @@
       "language": "French",
       "hello": "Bonjour",
       "flag": "🇬🇫",
-      "continent": "South America"
+      "continent": "South America",
+      "lat": 3.9339,
+      "lng": -53.1258
     }
   ],
   "meta": {
