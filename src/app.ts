@@ -416,7 +416,6 @@ const ContentSchema = z.object({
   url: z.string(),
   content: z.string().optional(),
   trip_id: z.string(),
-  user_id: z.string(),
   user_notes: z.string().optional(),
 });
 
@@ -591,16 +590,16 @@ const processContentAnalysisAsync = async (
     // Fire external API calls without waiting for response if needed
     if (!shouldSkipProcessing && url.includes("instagram.com")) {
       console.log("Instagram URL detected, calling analysis API");
-      // fetch("https://kadshnkjadnk.pinspire.co.in/api/analyze", {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ contentId: contentId, url: url }),
-      // }).catch((error) => {
-      //   console.error(
-      //     `Failed to call Instagram analysis API for content ${contentId}:`,
-      //     error
-      //   );
-      // });
+      fetch("https://kadshnkjadnk.pinspire.co.in/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentId: contentId, url: url }),
+      }).catch((error) => {
+        console.error(
+          `Failed to call Instagram analysis API for content ${contentId}:`,
+          error
+        );
+      });
     } else if (!shouldSkipProcessing && url.includes("tiktok.com")) {
       console.log("TikTok URL detected, calling analysis API");
       fetch("https://kadshnkjadnk.pinspire.co.in/api/tiktok-analyze", {
@@ -857,19 +856,19 @@ const processContentAnalysisAsync = async (
 
 app.post(
   "/api/extract-lat-long",
-  // authenticate,
+  authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      // const currentUser = req.currentUser;
-      // if (currentUser == null) {
-      //   res.status(401).json({ error: "User not authenticated" });
-      //   throw new Error("User not authenticated");
-      // }
-      // const user_id = currentUser.id;
+      const currentUser = req.currentUser;
+      if (currentUser == null) {
+        res.status(401).json({ error: "User not authenticated" });
+        throw new Error("User not authenticated");
+      }
+      const user_id = currentUser.id;
       const validatedData = ContentSchema.parse(req.body);
 
       console.log(req.body);
-      const { url, content, trip_id, user_notes,user_id } = validatedData;
+      const { url, content, trip_id, user_notes } = validatedData;
 
       console.log(
         `Received request to extract lat-long: URL=${url}, user_id=${user_id}, trip_id=${trip_id}`
