@@ -421,6 +421,10 @@ const ContentSchema = z.object({
   user_notes: z.string().optional(),
 });
 
+const RefreshContentSchema = z.object({
+  content_id: z.string(),
+});
+
 const UserTripSchema = z.object({
   role: z.string(),
   user_id: z.string().uuid(),
@@ -856,6 +860,296 @@ const processContentAnalysisAsync = async (
   }
 };
 
+// New function to process content updates (similar to processContentAnalysisAsync but for updates)
+const processContentUpdateAsync = async (
+  contentId: string,
+  description: string,
+  req: Request,
+  url: string,
+  userId: string,
+  tripId: string
+): Promise<void> => {
+  try {
+    console.log(`Starting async update processing for content ${contentId}`);
+
+    // Get existing content to preserve trip context
+    const existingContent = await prisma.content.findUnique({
+      where: { id: contentId },
+      select: {
+        id: true,
+        tripId: true,
+        userId: true,
+        url: true,
+      },
+    });
+
+    if (!existingContent) {
+      throw new Error(`Content ${contentId} not found`);
+    }
+
+    // Extract structured data using AI (same as extract-lat-long)
+    const analysis = await extractLocationAndClassify(description, req);
+
+    // Get title from the first analysis object, if present
+    const title =
+      analysis && analysis.length > 0 && analysis[0].title
+        ? analysis[0].title
+        : "";
+
+    // Calculate pins count
+    const pinsCount = analysis.filter(
+      (a) => a.classification !== "Not Pinned"
+    ).length;
+
+    // Delete existing pins for this content before creating new ones
+    console.log(`Deleting existing pins for content ${contentId}`);
+    await prisma.pin.deleteMany({
+      where: { contentId: contentId },
+    });
+    console.log(`Existing pins deleted for content ${contentId}`);
+
+    // Fire external API calls without waiting for response if needed
+    if (url.includes("instagram.com") || url.includes("youtube") || url.includes("youtu.be")) {
+      console.log("Instagram/YouTube URL detected, calling analysis API");
+      fetch("https://kadshnkjadnk.pinspire.co.in/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentId: contentId, url: url }),
+      }).catch((error) => {
+        console.error(
+          `Failed to call Instagram/YouTube analysis API for content ${contentId}:`,
+          error
+        );
+      });
+    } else if (url.includes("tiktok.com")) {
+      console.log("TikTok URL detected, calling analysis API");
+      fetch("https://kadshnkjadnk.pinspire.co.in/api/tiktok-analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentId: contentId, url: url }),
+      }).catch((error) => {
+        console.error(
+          `Failed to call TikTok analysis API for content ${contentId}:`,
+          error
+        );
+      });
+    }
+
+    // Update the Content entry with new structured data, title, and pins count
+    await updateContent(contentId, analysis, title, pinsCount);
+
+    req.logger?.debug(
+      `Updated content entry with new structured data ${contentId}`
+    );
+
+    let pinsCreated = 0;
+
+    // Process each analysis object for pin creation (same logic as extract-lat-long)
+    await Promise.all(
+      analysis.map(async (analysis) => {
+        try {
+          if (analysis.classification === "Not Pinned") {
+            return;
+          }
+
+          const full_loc =
+            (analysis.name ?? "") + " " + (analysis.location ?? "");
+
+          console.log(
+            `Processing pin for: ${full_loc} (${analysis.classification})`
+          );
+
+          // Step 1: Get Place ID
+          const placeId = await getPlaceId(full_loc, req);
+          let coordinates;
+          let placeCacheId;
+
+          // Step 2: Check if the place exists in the cache
+          let placeCache = await getPlaceCacheById(placeId);
+
+          if (!placeCache) {
+            req.logger?.debug(
+              "Could not find place in place Cache.. getting full place details"
+            );
+
+            // Step 3: If not in cache, fetch full place details (includes coordinates)
+            const placeDetails = await getFullPlaceDetails(full_loc, req);
+
+            req.logger?.debug(
+              `Place details for placeID - ${placeId} is - ${placeDetails}`
+            );
+
+            // Use coordinates from place details instead of separate API call
+            coordinates = placeDetails.location
+              ? {
+                  lat: placeDetails.location.latitude,
+                  lng: placeDetails.location.longitude,
+                }
+              : null;
+
+            if (!coordinates) {
+              req.logger?.error(`No coordinates found for place: ${full_loc}`);
+              throw new Error(
+                `Could not get coordinates for place: ${full_loc}`
+              );
+            }
+
+            req.logger?.debug(
+              `Coordinates for placeID - ${placeId} is - ${coordinates}`
+            );
+
+            // Step 4: Store in cache
+            placeCache = await createPlaceCache({
+              placeId: placeDetails.id,
+              name: placeDetails.name,
+              rating: placeDetails.rating ?? null,
+              userRatingCount: placeDetails.userRatingCount ?? null,
+              websiteUri: placeDetails.websiteUri ?? null,
+              googleMapsLink: placeDetails.googleMapsUri ?? null,
+              currentOpeningHours: placeDetails.currentOpeningHours,
+              regularOpeningHours: placeDetails.regularOpeningHours,
+              lat: coordinates.lat,
+              lng: coordinates.lng,
+              images: placeDetails.images ?? [],
+              utcOffsetMinutes: placeDetails.utcOffsetMinutes ?? null,
+            });
+
+            req.logger?.debug(
+              `Created new entry in place cache ${placeCache.id} for placeID ${placeId}`
+            );
+          } else {
+            req.logger?.debug(`Found place id - ${placeId} in place cache`);
+            coordinates = { lat: placeCache.lat, lng: placeCache.lng };
+          }
+
+          placeCacheId = placeCache.id;
+
+          // Step 5: Create Pin linked to PlaceCache
+          const pin = await createPin({
+            name: analysis.name ?? "",
+            category: analysis.classification ?? "",
+            contentId: contentId,
+            placeCacheId: placeCacheId,
+            coordinates: coordinates,
+            description: analysis.additional_info ?? "",
+          });
+
+          if (pin) {
+            pinsCreated++;
+          }
+
+          req.logger?.info(
+            `Created Pin - ${pin.id} with content_id - ${contentId} and place_id - ${placeCacheId}`
+          );
+        } catch (error) {
+          console.error(
+            `Error creating pin for ${analysis.name || "unknown place"}:`,
+            error
+          );
+          req.logger?.error(
+            `Failed to create pin for ${analysis.name}:`,
+            error
+          );
+          // Continue processing other pins even if one fails
+        }
+      })
+    );
+
+    // Determine if external API calls are needed
+    const needsExternalAPI =
+      url.includes("instagram.com") || 
+      url.includes("tiktok.com") || 
+      url.includes("youtube") || 
+      url.includes("youtu.be");
+
+    // If no external API calls are needed, set status to COMPLETED and send notifications
+    if (!needsExternalAPI) {
+      await updateContentStatus(contentId, "COMPLETED");
+
+      // Get content details for notification
+      const contentWithDetails = await prisma.content.findUnique({
+        where: { id: contentId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          trip: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      // Send notifications to trip members about pins updated (if any pins were added)
+      if (pinsCount > 0 && contentWithDetails) {
+        try {
+          await sendPinAddedNotifications(
+            contentWithDetails.trip.id,
+            contentWithDetails.user.id,
+            pinsCount,
+            contentWithDetails.trip.name,
+            contentWithDetails.user.name,
+            title || contentWithDetails.title || undefined,
+            contentWithDetails.id
+          );
+        } catch (notificationError) {
+          console.error(
+            "Error sending pin updated notifications:",
+            notificationError
+          );
+          // Don't fail the request if notifications fail
+        }
+      }
+
+      // Emit completion status via WebSocket
+      emitContentProcessingStatus(tripId, contentId, "completed", {
+        pinsCount: pinsCount,
+        title: title,
+      });
+    }
+
+    // Generate embeddings for updated content
+    try {
+      console.log(
+        `🔄 Starting embedding generation for updated content ${contentId}...`
+      );
+      generateContentEmbeddings(contentId)
+        .then(() => {
+          console.log(
+            ` Embeddings generated successfully for content ${contentId}`
+          );
+        })
+        .catch((embeddingError) => {
+          console.error(
+            `❌ Failed to generate embeddings for content ${contentId}:`,
+            embeddingError
+          );
+        });
+    } catch (embeddingError) {
+      console.error(
+        `❌ Error starting embedding generation for content ${contentId}:`,
+        embeddingError
+      );
+    }
+
+    console.log(` Async update processing completed for content ${contentId}`);
+  } catch (error) {
+    console.error(
+      `❌ Error in async update processing for content ${contentId}:`,
+      error
+    );
+    req.logger?.error(
+      `Async update processing failed for content ${contentId}:`,
+      error
+    );
+  }
+};
+
 app.post(
   "/api/extract-lat-long",
   authenticate,
@@ -1061,6 +1355,224 @@ app.post(
           .json({ error: "Invalid input data", details: error.errors });
       } else {
         console.error(`Error processing request:`, error);
+        res.status(500).json({ error: "Internal server error." });
+      }
+    }
+  }
+);
+
+// New endpoint to refresh existing content (similar to extract-lat-long but refreshes/updates existing content instead of creating)
+app.post(
+  "/api/refresh-content",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const validatedData = RefreshContentSchema.parse(req.body);
+
+      console.log(req.body);
+      const { content_id } = validatedData;
+
+      console.log(
+        `Received request to refresh content: content_id=${content_id}`
+      );
+      req.logger?.info(
+        `Request received to refresh content: content_id=${content_id}`
+      );
+
+      // Get the existing content entry
+      const existingContent = await prisma.content.findUnique({
+        where: { id: content_id },
+        include: {
+          trip: true,
+        },
+      });
+
+      if (!existingContent) {
+        res.status(404).json({ error: "Content not found" });
+        return;
+      }
+
+      const trip_id = existingContent.tripId;
+      const user_id = existingContent.userId;  // Use existing content's userId
+      const contentUrl = existingContent.url;  // Always use existing URL
+
+      let description = "";
+      let contentThumbnail = existingContent.thumbnail;
+
+      // Always fetch content from the URL
+      req.logger?.debug(
+        `Fetching content from URL: ${contentUrl}`
+      );
+
+      // For Instagram, Facebook, or TikTok - use metadata extraction
+      if (
+        contentUrl.includes("instagram.com") ||
+        contentUrl.includes("facebook.com") ||
+        contentUrl.includes("tiktok.com") ||
+        contentUrl.includes("youtube.com") ||
+        contentUrl.includes("youtu.be")
+      ) {
+        req.logger?.debug(
+          `Social media URL detected, using metadata extraction`
+        );
+
+        const metadata = await getMetadata(contentUrl);
+
+        if (contentUrl.includes("facebook.com")) {
+          req.logger?.debug(
+            `Facebook URL detected, using custom metadata extraction`
+          );
+          description = metadata?.og.title ?? "";
+        } else if (contentUrl.includes("youtube.com") || contentUrl.includes("youtu.be")) {
+          const videoId = getYouTubeVideoId(contentUrl)
+          req.logger?.debug(`YouTube URL detected, analyzing content for ${videoId}`);
+          
+          const {title, description: desc} = videoId ? await getYoutubeMetadata(videoId) : {title: null, description: ""}
+
+          if (title || desc) {
+            const isTravelContent = await analyzeYouTubeContent(
+              title,
+              desc,
+              req
+            );
+            if (!isTravelContent) {
+              req.logger?.info(
+                `YouTube content is not travel-related. Skipping processing for URL: ${contentUrl}`
+              );
+              // Immediately return a response indicating that the content is not relevant
+              res.status(200).json({
+                success: false,
+                message:
+                  "YouTube content is not travel-related and will not be processed.",
+              });
+              return; 
+            }
+            req.logger?.info(
+              "YouTube content is travel-related. Proceeding with processing."
+            );
+            description = [title, desc].filter(Boolean).join(" ");
+          } else {
+            req.logger?.warn(
+              `Missing title or description for YouTube URL: ${contentUrl}. Skipping analysis.`
+            );
+            
+            res.status(200).json({
+                success: false,
+                message:
+                  `Missing title or description for YouTube URL: ${contentUrl}`,
+            });
+            return;
+          }
+        } else {
+          description = [metadata?.meta.title, metadata?.meta.description]
+            .filter(Boolean)
+            .join(" ");
+        }
+        contentThumbnail = metadata?.og.image ?? contentThumbnail;
+      }
+      // For all other URLs - use Jina API directly
+      else {
+        try {
+          req.logger?.debug(
+            `Non-social media URL detected, fetching full webpage content via Jina API: ${contentUrl}`
+          );
+
+          const jinaResponse = await fetch(`https://r.jina.ai/${contentUrl}`, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${process.env.JINA_API_TOKEN}`,
+            },
+          });
+
+          if (jinaResponse.ok) {
+            const webpageContent = await jinaResponse.text();
+            if (webpageContent && webpageContent.trim().length > 0) {
+              // Use the full webpage content
+              description = webpageContent;
+              req.logger?.debug(
+                `Successfully extracted webpage content (${webpageContent.length} characters)`
+              );
+            } else {
+              req.logger?.warn(`Jina API returned empty content`);
+              description = "No content available from URL";
+            }
+          } else {
+            req.logger?.warn(
+              `Jina API request failed with status: ${jinaResponse.status}`
+            );
+            description = "Failed to fetch content from URL";
+          }
+        } catch (jinaError) {
+          req.logger?.warn(
+            `Failed to fetch webpage content via Jina API:`,
+            jinaError
+          );
+          description = "Error fetching content from URL";
+        }
+      }
+
+      console.log("Description is ", description);
+
+      if (!description) {
+        req.logger?.error(`Failed to fetch metadata for URL - ${contentUrl}`);
+      }
+      
+      // Update the content's rawData (URL and user_notes remain unchanged)
+      await prisma.content.update({
+        where: { id: content_id },
+        data: {
+          rawData: description,
+          ...(contentThumbnail && { thumbnail: contentThumbnail }),
+          status: "PROCESSING",
+        },
+      });
+
+      console.log(
+        `Content updated with ID: ${content_id}. Starting async processing...`
+      );
+      req.logger?.info(
+        `Content updated: ${content_id}. Processing will continue asynchronously.`
+      );
+
+      // Emit processing status via WebSocket
+      emitContentProcessingStatus(trip_id, content_id, "processing");
+
+      // Start async processing in the background (don't await)
+      processContentUpdateAsync(
+        content_id,
+        description,
+        req,
+        contentUrl,
+        user_id,
+        trip_id
+      );
+
+      // Return immediate response with content info
+      res.status(202).json({
+        success: true,
+        message: "Content is being refreshed and processed",
+        content: {
+          id: content_id,
+          url: contentUrl,
+          rawData: description,
+          userId: user_id,
+          tripId: trip_id,
+          thumbnail: contentThumbnail,
+          updatedAt: new Date(),
+        },
+        processing: {
+          status: "in_progress",
+          message:
+            "AI analysis and pin updates are being processed in the background",
+        },
+      });
+    } catch (error) {
+      console.log("Look at exact error", error);
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json({ error: "Invalid input data", details: error.errors });
+      } else {
+        console.error(`Error processing refresh request:`, error);
         res.status(500).json({ error: "Internal server error." });
       }
     }
@@ -3087,6 +3599,12 @@ app.post(
       const description = content;
 
       console.log("Processing transcript content:", description);
+
+      // Validate that description is not empty
+      if (!description || description.trim() === "") {
+        res.status(400).json({ error: "Content/transcript is required" });
+        return;
+      }
 
       // Extract structured data using AI (same as extract-lat-long)
       const analysis = await extractLocationAndClassify(description, req);
