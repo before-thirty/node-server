@@ -129,6 +129,7 @@ app.use("/api/moderation", moderationRoutes);
 // );
 const PORT = process.env.PORT || 5000;
 const baseUrl = process.env.BASE_URL || "http://localhost" + `:${PORT}`;
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "asdfasdf";
 
 const getFinalUrl = async (url: string) => {
   const res = await fetch(url, { redirect: "follow" }); // follows redirects automatically
@@ -363,10 +364,17 @@ const processContentAnalysisAsync = async (
     // Determine if external API calls are needed (skip for demo trips)
     const needsExternalAPI =
       !shouldSkipProcessing &&
-      (url.includes("instagram.com") || url.includes("tiktok.com") || url.includes("youtube") ||  url.includes("youtu.be"));
+      (url.includes("instagram.com") ||
+        url.includes("tiktok.com") ||
+        url.includes("youtube") ||
+        url.includes("youtu.be"));
 
     // Fire external API calls without waiting for response if needed
-    if (!shouldSkipProcessing && url.includes("instagram.com") ||  url.includes("youtube") ||  url.includes("youtu.be")) {
+    if (
+      (!shouldSkipProcessing && url.includes("instagram.com")) ||
+      url.includes("youtube") ||
+      url.includes("youtu.be")
+    ) {
       console.log("Instagram URL detected, calling analysis API");
       fetch("https://kadshnkjadnk.pinspire.co.in/api/analyze", {
         method: "POST",
@@ -684,10 +692,14 @@ app.post(
             );
             description = metadata?.og.title ?? "";
           } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
-            const videoId = getYouTubeVideoId(url)
-            req.logger?.debug(`YouTube URL detected, analyzing content for ${videoId}`);
-            
-            const {title, description: desc} =  videoId ? await getYoutubeMetadata(videoId) : {title: null, description: ""}
+            const videoId = getYouTubeVideoId(url);
+            req.logger?.debug(
+              `YouTube URL detected, analyzing content for ${videoId}`
+            );
+
+            const { title, description: desc } = videoId
+              ? await getYoutubeMetadata(videoId)
+              : { title: null, description: "" };
 
             if (title || desc) {
               const isTravelContent = await analyzeYouTubeContent(
@@ -705,7 +717,7 @@ app.post(
                   message:
                     "YouTube content is not travel-related and will not be processed.",
                 });
-                return; 
+                return;
               }
               req.logger?.info(
                 "YouTube content is travel-related. Proceeding with processing."
@@ -715,11 +727,10 @@ app.post(
               req.logger?.warn(
                 `Missing title or description for YouTube URL: ${url}. Skipping analysis.`
               );
-              
+
               res.status(200).json({
-                  success: false,
-                  message:
-                    `Missing title or description for YouTube URL: ${url}`,
+                success: false,
+                message: `Missing title or description for YouTube URL: ${url}`,
               });
               return;
             }
@@ -777,7 +788,7 @@ app.post(
       if (!description) {
         req.logger?.error(`Failed to fetch metadata for URL - ${url}`);
       }
-      
+
       // Create a DB entry for content
       const newContent = await createContent(
         url,
@@ -786,7 +797,6 @@ app.post(
         trip_id,
         user_notes,
         contentThumbnail
-
       );
 
       console.log(
@@ -1129,6 +1139,99 @@ app.get("/api/health", async (req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+app.get(
+  "/api/admin/latest-content",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const providedSecret =
+        req.header("x-admin-secret") || (req.query.secret as string);
+      const pinFilter = (req.query.pins as string) || "all";
+
+      if (!providedSecret || providedSecret !== ADMIN_SECRET) {
+        res.status(401).json({
+          success: false,
+          error: "Unauthorized",
+        });
+        return;
+      }
+
+      const whereClause =
+        pinFilter === "none"
+          ? {
+              pins_count: 0,
+            }
+          : undefined;
+
+      const contents = await prisma.content.findMany({
+        where: whereClause,
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 50,
+        select: {
+          id: true,
+          title: true,
+          url: true,
+          createdAt: true,
+          updatedAt: true,
+          pins_count: true,
+          thumbnail: true,
+          userNotes: true,
+          status: true,
+          trip: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          pins: {
+            orderBy: {
+              createdAt: "desc",
+            },
+            select: {
+              id: true,
+              name: true,
+              category: true,
+              description: true,
+              createdAt: true,
+              placeCache: {
+                select: {
+                  id: true,
+                  name: true,
+                  lat: true,
+                  lng: true,
+                  rating: true,
+                  userRatingCount: true,
+                  googleMapsLink: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      res.status(200).json({
+        success: true,
+        count: contents.length,
+        contents,
+      });
+    } catch (error) {
+      console.error("Error fetching admin latest content:", error);
+      res.status(500).json({
+        success: false,
+        error: "Internal server error",
+      });
+    }
+  }
+);
 
 app.post("/api/users", async (req: Request, res: Response): Promise<void> => {
   try {
@@ -2674,9 +2777,6 @@ app.post(
 
       // Step 6: Update content with title and pin count
       await updateContent(newContent.id, [], manualContentTitle, 1);
-      
-
-      
 
       // Step 7: Create Pin linked to PlaceCache
       const coordinates = { lat: placeCache.lat, lng: placeCache.lng };
@@ -2694,7 +2794,10 @@ app.post(
         `Created manual pin - ${pin.id} with content_id - ${newContent.id} and place_id - ${placeCache.id}`
       );
 
-      const updatedContent = await updateContentStatus(newContent.id, "COMPLETED");
+      const updatedContent = await updateContentStatus(
+        newContent.id,
+        "COMPLETED"
+      );
 
       // Step 7: Respond with the created data
       res.status(200).json({
@@ -3951,24 +4054,31 @@ app.post(
       };
 
       // Load countries data from JSON file
-      const countriesPath = path.join(__dirname, "..", "data", "countries.json");
+      const countriesPath = path.join(
+        __dirname,
+        "..",
+        "data",
+        "countries.json"
+      );
       const countriesData = JSON.parse(fs.readFileSync(countriesPath, "utf8"));
-      
+
       // Find the requested country in the JSON data
-      const countryInfo = countriesData.countries.find((c: any) => c.name === country);
-      
+      const countryInfo = countriesData.countries.find(
+        (c: any) => c.name === country
+      );
+
       if (!countryInfo) {
-        const availableCountries = countriesData.countries.map((c: any) => c.name).slice(0, 10);
+        const availableCountries = countriesData.countries
+          .map((c: any) => c.name)
+          .slice(0, 10);
         res.status(400).json({
           error: `Unsupported country: ${country}. Country not found in countries.json.`,
           availableCountries: availableCountries,
           totalCountries: countriesData.countries.length,
-          message: `Please use one of the ${countriesData.countries.length} supported countries.`
+          message: `Please use one of the ${countriesData.countries.length} supported countries.`,
         });
         return;
       }
-
-
 
       // Store or update country demo data
       const countryDemoData = await prisma.countryDemoData.upsert({
@@ -3986,7 +4096,7 @@ app.post(
           countryId: countryInfo.code,
           url: content.url,
           demoData,
-          lat: 0, // Default coordinates - can be updated later  
+          lat: 0, // Default coordinates - can be updated later
           lng: 0,
           flag: countryInfo.flag,
         },
@@ -4180,15 +4290,17 @@ app.post(
   "/api/backfill-google-maps-links",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      console.log("🔗 Starting Google Maps links backfill for latest 1000 places...");
-      
+      console.log(
+        "🔗 Starting Google Maps links backfill for latest 1000 places..."
+      );
+
       // Get latest 1000 places that don't have Google Maps links
       const placesToUpdate = await prisma.placeCache.findMany({
         where: {
           googleMapsLink: null, // Only get places without Google Maps links
         },
         orderBy: {
-          createdAt: 'desc', // Latest first
+          createdAt: "desc", // Latest first
         },
         take: 10,
         select: {
@@ -4221,53 +4333,73 @@ app.post(
 
       for (let i = 0; i < placesToUpdate.length; i += batchSize) {
         const batch = placesToUpdate.slice(i, i + batchSize);
-        
-        console.log(`🔄 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(placesToUpdate.length / batchSize)} (${batch.length} places)`);
+
+        console.log(
+          `🔄 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
+            placesToUpdate.length / batchSize
+          )} (${batch.length} places)`
+        );
 
         // Process batch in parallel
         await Promise.allSettled(
           batch.map(async (place) => {
             try {
               // Get only Google Maps URI to minimize API costs
-              const googleMapsUri = await getGoogleMapsUriOnly(place.placeId, req);
-              
+              const googleMapsUri = await getGoogleMapsUriOnly(
+                place.placeId,
+                req
+              );
+
               if (googleMapsUri) {
                 // Fetch Google Maps image from the URI
                 console.log(`🖼️ Fetching Google Maps image for ${place.name}`);
-                const googleMapsImage = await fetchGoogleMapsImage(googleMapsUri);
-                
+                const googleMapsImage = await fetchGoogleMapsImage(
+                  googleMapsUri
+                );
+
                 // Prepare update data
                 const updateData: any = {
                   googleMapsLink: googleMapsUri,
                   lastCached: new Date(), // Update the cache timestamp
                 };
-                
+
                 // Always update images array - either with Google Maps image or empty (no backup mode)
                 if (googleMapsImage) {
-                  console.log(` Found Google Maps image for ${place.name}: ${googleMapsImage}`);
+                  console.log(
+                    ` Found Google Maps image for ${place.name}: ${googleMapsImage}`
+                  );
                   updateData.images = [googleMapsImage]; // Replace existing images with the Google Maps image
                 } else {
-                  console.log(`⚠️ No image found for ${place.name} Google Maps link - clearing images array`);
+                  console.log(
+                    `⚠️ No image found for ${place.name} Google Maps link - clearing images array`
+                  );
                   updateData.images = []; // Clear existing images since we only want Google Maps metadata images
                 }
-                
+
                 // Update the place cache with the Google Maps link and image
                 await prisma.placeCache.update({
                   where: { id: place.id },
                   data: updateData,
                 });
-                
-                console.log(` Updated ${place.name}: ${googleMapsUri}${googleMapsImage ? ' with image' : ''}`);
+
+                console.log(
+                  ` Updated ${place.name}: ${googleMapsUri}${
+                    googleMapsImage ? " with image" : ""
+                  }`
+                );
                 successCount++;
               } else {
                 console.log(`⚠️ No Google Maps URI found for ${place.name}`);
                 errorCount++;
-                errors.push(`No Google Maps URI found for ${place.name} (ID: ${place.id})`);
+                errors.push(
+                  `No Google Maps URI found for ${place.name} (ID: ${place.id})`
+                );
               }
             } catch (error) {
               console.error(`❌ Failed to update ${place.name}:`, error);
               errorCount++;
-              const errorMessage = error instanceof Error ? error.message : String(error);
+              const errorMessage =
+                error instanceof Error ? error.message : String(error);
               errors.push(`Failed to update ${place.name}: ${errorMessage}`);
             }
           })
@@ -4275,11 +4407,13 @@ app.post(
 
         // Add delay between batches to respect rate limits
         if (i + batchSize < placesToUpdate.length) {
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
 
-      console.log(`🎉 Backfill completed: ${successCount} successful, ${errorCount} errors`);
+      console.log(
+        `🎉 Backfill completed: ${successCount} successful, ${errorCount} errors`
+      );
 
       res.status(200).json({
         success: true,
@@ -4291,10 +4425,11 @@ app.post(
       });
     } catch (error) {
       console.error("Error during Google Maps links backfill:", error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      res.status(500).json({ 
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      res.status(500).json({
         error: "Internal server error during backfill",
-        message: errorMessage 
+        message: errorMessage,
       });
     }
   }
