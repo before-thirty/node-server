@@ -131,6 +131,7 @@ app.use("/api/moderation", moderationRoutes);
 // );
 const PORT = process.env.PORT || 5000;
 const baseUrl = process.env.BASE_URL || "http://localhost" + `:${PORT}`;
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "asdfasdf";
 
 interface WebMetadata {
   og?: {
@@ -1911,6 +1912,99 @@ app.get("/api/health", async (req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+app.get(
+  "/api/admin/latest-content",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const providedSecret =
+        req.header("x-admin-secret") || (req.query.secret as string);
+      const pinFilter = (req.query.pins as string) || "all";
+
+      if (!providedSecret || providedSecret !== ADMIN_SECRET) {
+        res.status(401).json({
+          success: false,
+          error: "Unauthorized",
+        });
+        return;
+      }
+
+      const whereClause =
+        pinFilter === "none"
+          ? {
+              pins_count: 0,
+            }
+          : undefined;
+
+      const contents = await prisma.content.findMany({
+        where: whereClause,
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 50,
+        select: {
+          id: true,
+          title: true,
+          url: true,
+          createdAt: true,
+          updatedAt: true,
+          pins_count: true,
+          thumbnail: true,
+          userNotes: true,
+          status: true,
+          trip: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          pins: {
+            orderBy: {
+              createdAt: "desc",
+            },
+            select: {
+              id: true,
+              name: true,
+              category: true,
+              description: true,
+              createdAt: true,
+              placeCache: {
+                select: {
+                  id: true,
+                  name: true,
+                  lat: true,
+                  lng: true,
+                  rating: true,
+                  userRatingCount: true,
+                  googleMapsLink: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      res.status(200).json({
+        success: true,
+        count: contents.length,
+        contents,
+      });
+    } catch (error) {
+      console.error("Error fetching admin latest content:", error);
+      res.status(500).json({
+        success: false,
+        error: "Internal server error",
+      });
+    }
+  }
+);
 
 app.post("/api/users", async (req: Request, res: Response): Promise<void> => {
   try {
