@@ -3600,11 +3600,6 @@ app.post(
 
       console.log("Processing transcript content:", description);
 
-      // Validate that description is not empty
-      if (!description || description.trim() === "") {
-        res.status(400).json({ error: "Content/transcript is required" });
-        return;
-      }
 
       // Extract structured data using AI (same as extract-lat-long)
       const analysis = await extractLocationAndClassify(description, req);
