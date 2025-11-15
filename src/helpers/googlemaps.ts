@@ -12,7 +12,7 @@ const GOOGLE_MAPS_IMAGE_API = "https://places.googleapis.com/v1";
 interface PlaceDetails {
   id: string;
   name: string;
-  rating?: number;
+  rating?: number | null;
   userRatingCount?: number;
   websiteUri?: string;
   googleMapsUri?: string;
@@ -32,6 +32,48 @@ interface PlaceDetails {
     latitude: number;
     longitude: number;
   } | null;
+}
+
+// Helper function to generate Google search URL from place name
+function generateGoogleSearchUrl(placeName: string): string {
+  const encodedQuery = encodeURIComponent(placeName);
+  return `https://www.google.com/search?q=${encodedQuery}`;
+}
+
+// Helper function to create always-open mock opening hours
+function createAlwaysOpenHours(): any {
+  return {
+    periods: [
+      {
+        open: { day: 0, hour: 0, minute: 0 },
+        close: { day: 0, hour: 23, minute: 59 }
+      },
+      {
+        open: { day: 1, hour: 0, minute: 0 },
+        close: { day: 1, hour: 23, minute: 59 }
+      },
+      {
+        open: { day: 2, hour: 0, minute: 0 },
+        close: { day: 2, hour: 23, minute: 59 }
+      },
+      {
+        open: { day: 3, hour: 0, minute: 0 },
+        close: { day: 3, hour: 23, minute: 59 }
+      },
+      {
+        open: { day: 4, hour: 0, minute: 0 },
+        close: { day: 4, hour: 23, minute: 59 }
+      },
+      {
+        open: { day: 5, hour: 0, minute: 0 },
+        close: { day: 5, hour: 23, minute: 59 }
+      },
+      {
+        open: { day: 6, hour: 0, minute: 0 },
+        close: { day: 6, hour: 23, minute: 59 }
+      }
+    ]
+  };
 }
 
 // Updated createPlaceCache function parameters interface
@@ -61,7 +103,7 @@ const activeSessions = new Map<string, AutocompleteSession>();
 
 // Generate a new session token
 function generateSessionToken(): string {
-  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 }
 
 // Get or create a session token for a user
@@ -176,7 +218,7 @@ export async function getFullPlaceDetails(
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask":
-          "places.addressComponents,places.formattedAddress,places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,places.currentOpeningHours,places.regularOpeningHours,places.photos,places.utcOffsetMinutes,places.location,places.editorialSummary,places.businessStatus,places.priceLevel,places.types,places.googleMapsUri,places.googleMapsLinks",
+          "places.addressComponents,places.formattedAddress,places.id,places.displayName,places.photos,places.utcOffsetMinutes,places.location,places.businessStatus,places.priceLevel,places.types,places.googleMapsUri,places.googleMapsLinks",
       },
     };
     const response = await axios.post(url, data, config);
@@ -192,12 +234,16 @@ export async function getFullPlaceDetails(
     console.log("Google Maps URI:", place.googleMapsUri);
     console.log("Google Maps Links:", place.googleMapsLinks);
     
-    // Extract image from Google Maps URI metadata with backup to photos API
+    // Get both image and rating from Google Maps URI in a single request
+    let extractedRating: number | null = null;
     let photoUrls: string[] = [];
+    
     if (place.googleMapsUri) {
-      const googleMapsImage = await fetchGoogleMapsImage(place.googleMapsUri);
-      if (googleMapsImage) {
-        photoUrls.push(googleMapsImage);
+      const metadata = await fetchGoogleMapsMetadata(place.googleMapsUri);
+      extractedRating = metadata.rating;
+      
+      if (metadata.imageUrl) {
+        photoUrls.push(metadata.imageUrl);
       } else {
         console.log('🔄 No image from metadata, falling back to photos API');
         // Fallback to Google Maps Image API
@@ -236,16 +282,19 @@ export async function getFullPlaceDetails(
     return {
       id: place.id,
       name: place.displayName?.text || "",
-      rating: place.rating,
-      userRatingCount: place.userRatingCount,
-      websiteUri: place.websiteUri,
+      rating: extractedRating,
+      userRatingCount: -1,
+      websiteUri: generateGoogleSearchUrl(place.displayName?.text || ""),
       googleMapsUri: place.googleMapsUri,
-      currentOpeningHours: place.currentOpeningHours,
-      regularOpeningHours: place.regularOpeningHours,
+      currentOpeningHours: createAlwaysOpenHours(),
+      regularOpeningHours: createAlwaysOpenHours(),
       images: photoUrls ?? [],
       utcOffsetMinutes: place.utcOffsetMinutes,
       formattedAddress: place.formattedAddress,
-      editorialSummary: place.editorialSummary,
+      editorialSummary: {
+        text: "N/A",
+        languageCode: "en"
+      },
       businessStatus: place.businessStatus,
       priceLevel: place.priceLevel,
       types: place.types,
@@ -281,7 +330,7 @@ export async function getPlaceDetailsFromId(
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask":
-          "addressComponents,formattedAddress,id,displayName,rating,userRatingCount,websiteUri,currentOpeningHours,regularOpeningHours,photos,utcOffsetMinutes,location,editorialSummary,businessStatus,priceLevel,types,googleMapsUri,googleMapsLinks",
+          "addressComponents,formattedAddress,id,displayName,photos,utcOffsetMinutes,location,businessStatus,priceLevel,types,googleMapsUri,googleMapsLinks",
       },
     };
 
@@ -310,12 +359,16 @@ export async function getPlaceDetailsFromId(
     console.log("Google Maps URI:", place.googleMapsUri);
     console.log("Google Maps Links:", place.googleMapsLinks);
 
-    // Extract image from Google Maps URI metadata with backup to photos API
+    // Get both image and rating from Google Maps URI in a single request
+    let extractedRating: number | null = null;
     let photoUrls: string[] = [];
+    
     if (place.googleMapsUri) {
-      const googleMapsImage = await fetchGoogleMapsImage(place.googleMapsUri);
-      if (googleMapsImage) {
-        photoUrls.push(googleMapsImage);
+      const metadata = await fetchGoogleMapsMetadata(place.googleMapsUri);
+      extractedRating = metadata.rating;
+      
+      if (metadata.imageUrl) {
+        photoUrls.push(metadata.imageUrl);
       } else {
         console.log('🔄 No image from metadata, falling back to photos API');
         // Fallback to Google Maps Image API
@@ -355,16 +408,19 @@ export async function getPlaceDetailsFromId(
     return {
       id: place.id,
       name: place.displayName?.text || "",
-      rating: place.rating,
-      userRatingCount: place.userRatingCount,
-      websiteUri: place.websiteUri,
+      rating: extractedRating,
+      userRatingCount: -1,
+      websiteUri: generateGoogleSearchUrl(place.displayName?.text || ""),
       googleMapsUri: place.googleMapsUri,
-      currentOpeningHours: place.currentOpeningHours,
-      regularOpeningHours: place.regularOpeningHours,
+      currentOpeningHours: createAlwaysOpenHours(),
+      regularOpeningHours: createAlwaysOpenHours(),
       images: photoUrls ?? [],
       utcOffsetMinutes: place.utcOffsetMinutes,
       formattedAddress: place.formattedAddress,
-      editorialSummary: place.editorialSummary,
+      editorialSummary: {
+        text: "N/A",
+        languageCode: "en"
+      },
       businessStatus: place.businessStatus,
       priceLevel: place.priceLevel,
       types: place.types,
@@ -587,14 +643,19 @@ export async function searchPlaces(
   }
 }
 
+interface GoogleMapsMetadata {
+  imageUrl: string | null;
+  rating: number | null;
+}
+
 /**
- * Extracts image URL from Google Maps link meta tags
+ * Extracts both image URL and rating from Google Maps link meta tags in a single request
  * @param googleMapsLink - The Google Maps link (e.g., https://maps.google.com/?cid=12345&g_mp=...)
- * @returns Promise<string> - The extracted image URL or null if not found
+ * @returns Promise<GoogleMapsMetadata> - The extracted image URL and rating
  */
-export const fetchGoogleMapsImage = async (googleMapsLink: string): Promise<string | null> => {
+export const fetchGoogleMapsMetadata = async (googleMapsLink: string): Promise<GoogleMapsMetadata> => {
   try {
-    console.log('🖼️ Fetching Google Maps image from:', googleMapsLink);
+    console.log('🔍 Fetching Google Maps metadata (image + rating) from:', googleMapsLink);
     
     const response = await fetch(googleMapsLink, {
       method: 'GET',
@@ -605,40 +666,88 @@ export const fetchGoogleMapsImage = async (googleMapsLink: string): Promise<stri
 
     if (!response.ok) {
       console.warn('Failed to fetch Google Maps page:', response.status);
-      return null;
+      return { imageUrl: null, rating: null };
     }
 
     const html = await response.text();
     
-    // Parse HTML and extract image URL from meta tags
+    // Parse HTML and extract both image and rating from meta tags
     const root = parse(html);
     
+    let imageUrl: string | null = null;
+    let rating: number | null = null;
+    
+    // Extract image URL
     // Look for og:image meta tag first
     const ogImageMeta = root.querySelector('meta[property="og:image"]');
     if (ogImageMeta) {
-      const imageUrl = ogImageMeta.getAttribute('content');
+      imageUrl = ogImageMeta.getAttribute('content') || null;
       if (imageUrl) {
         console.log('✅ Successfully extracted image URL from og:image:', imageUrl);
-        return imageUrl;
       }
     }
     
     // Fallback to itemprop="image" meta tag
-    const itempropImageMeta = root.querySelector('meta[itemprop="image"]');
-    if (itempropImageMeta) {
-      const imageUrl = itempropImageMeta.getAttribute('content');
-      if (imageUrl) {
-        console.log('✅ Successfully extracted image URL from itemprop="image":', imageUrl);
-        return imageUrl;
+    if (!imageUrl) {
+      const itempropImageMeta = root.querySelector('meta[itemprop="image"]');
+      if (itempropImageMeta) {
+        imageUrl = itempropImageMeta.getAttribute('content') || null;
+        if (imageUrl) {
+          console.log('✅ Successfully extracted image URL from itemprop="image":', imageUrl);
+        }
       }
     }
     
-    // If no image found in any meta tags
-    console.warn('❌ No image found in Google Maps meta tags');
-    return null;
+    // Extract rating
+    // Look for og:description which contains "★★★★★ · Pub"
+    const ogDescription = root.querySelector('meta[property="og:description"]');
+    if (ogDescription) {
+      const description = ogDescription.getAttribute('content');
+      if (description) {
+        const starMatches = description.match(/★+/g);
+        if (starMatches && starMatches[0]) {
+          rating = starMatches[0].length;
+          console.log('✅ Successfully extracted rating from og:description:', rating);
+        }
+      }
+    }
+    
+    // Fallback to itemprop="description" meta tag for rating
+    if (!rating) {
+      const itempropDescription = root.querySelector('meta[itemprop="description"]');
+      if (itempropDescription) {
+        const description = itempropDescription.getAttribute('content');
+        if (description) {
+          const starMatches = description.match(/★+/g);
+          if (starMatches && starMatches[0]) {
+            rating = starMatches[0].length;
+            console.log('✅ Successfully extracted rating from itemprop="description":', rating);
+          }
+        }
+      }
+    }
+    
+    if (!imageUrl) {
+      console.warn('❌ No image found in Google Maps meta tags');
+    }
+    if (!rating) {
+      console.warn('❌ No rating found in Google Maps meta tags');
+    }
+    
+    return { imageUrl, rating };
     
   } catch (error) {
-    console.error('Error fetching Google Maps image:', error);
-    return null;
+    console.error('Error fetching Google Maps metadata:', error);
+    return { imageUrl: null, rating: null };
   }
+};
+
+/**
+ * Legacy function - now calls fetchGoogleMapsMetadata for backwards compatibility
+ * @param googleMapsLink - The Google Maps link
+ * @returns Promise<string | null> - The extracted image URL or null if not found
+ */
+export const fetchGoogleMapsImage = async (googleMapsLink: string): Promise<string | null> => {
+  const metadata = await fetchGoogleMapsMetadata(googleMapsLink);
+  return metadata.imageUrl;
 };

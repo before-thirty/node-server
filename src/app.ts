@@ -12,6 +12,8 @@ import {
   classifyPlaceCategory,
   analyzeYouTubeContent,
 } from "./helpers/openai";
+import axios from "axios";
+import { parse } from "node-html-parser";
 import parser from "html-metadata-parser";
 import {
   getPlaceId,
@@ -131,6 +133,212 @@ const PORT = process.env.PORT || 5000;
 const baseUrl = process.env.BASE_URL || "http://localhost" + `:${PORT}`;
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "asdfasdf";
 
+interface WebMetadata {
+  og?: {
+    title?: string;
+    description?: string;
+    image?: string;
+    url?: string;
+    site_name?: string;
+    type?: string;
+    caption?: string; // Instagram-specific: clean caption text
+  };
+  twitter?: {
+    card?: string;
+    title?: string;
+    description?: string;
+    image?: string;
+    site?: string;
+  };
+  meta?: {
+    title?: string;
+    description?: string;
+  };
+}
+
+/**
+ * Extracts metadata from web pages using axios with Instagram CSRF token
+ * @param url - The URL to fetch metadata from
+ * @returns Promise<WebMetadata | null> - The extracted metadata
+ */
+const fetchWebMetadata = async (url: string): Promise<WebMetadata | null> => {
+  const maxRetries = 5;
+  let attempt = 0;
+
+  while (attempt < maxRetries) {
+    attempt++;
+
+    try {
+      console.log(
+        `🔍 Fetching Instagram metadata (attempt ${attempt}/${maxRetries}) from:`,
+        url
+      );
+
+      // Instagram CSRF tokens - randomly pick one
+      const instagramCsrfTokens = [
+        "Xlr1xoC5aViXOOyu8gNCdazYXta7jrPT",
+        "s3ZvilLdQFSmR06cSKtAmZ7gzx49FejO",
+      ];
+      const instagramCsrfToken =
+        instagramCsrfTokens[
+          Math.floor(Math.random() * instagramCsrfTokens.length)
+        ];
+      console.log(
+        `🎲 Using CSRF token: ${instagramCsrfToken.substring(0, 8)}...`
+      );
+
+      const response = await axios.get(url, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "gzip, deflate, br",
+          Cookie: `csrftoken=${instagramCsrfToken}; Domain=instagram.com; Secure`,
+          "Sec-Fetch-Dest": "document",
+          "Sec-Fetch-Mode": "navigate",
+          "Sec-Fetch-Site": "none",
+          "Sec-Fetch-User": "?1",
+          "Upgrade-Insecure-Requests": "1",
+        },
+        timeout: 10000,
+        maxRedirects: 5,
+      });
+
+      const html = response.data;
+
+      // Check if we got redirected to login page
+      if (
+        html.includes("Login • Instagram") ||
+        html.includes("Welcome back to Instagram")
+      ) {
+        console.warn(
+          `⚠️ Instagram returned login page on attempt ${attempt}. Retrying...`
+        );
+
+        if (attempt < maxRetries) {
+          // Wait before retrying (exponential backoff)
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+          console.log(`⏳ Waiting ${delay}ms before retry...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue; // Retry
+        } else {
+          console.error(
+            "❌ All retry attempts failed - Instagram still returning login page"
+          );
+          return null;
+        }
+      }
+
+      console.log(
+        `✅ Successfully received Instagram content on attempt ${attempt}`
+      );
+
+      // Parse HTML and extract metadata from meta tags
+      const root = parse(html);
+
+      const metadata: WebMetadata = {
+        og: {},
+        twitter: {},
+        meta: {},
+      };
+
+      // Extract Open Graph meta tags
+      const ogTitle = root.querySelector('meta[property="og:title"]');
+      if (ogTitle) {
+        metadata.og!.title = ogTitle.getAttribute("content") || undefined;
+      }
+
+      const ogDescription = root.querySelector(
+        'meta[property="og:description"]'
+      );
+      if (ogDescription) {
+        metadata.og!.description =
+          ogDescription.getAttribute("content") || undefined;
+      }
+
+      const ogImage = root.querySelector('meta[property="og:image"]');
+      if (ogImage) {
+        metadata.og!.image = ogImage.getAttribute("content") || undefined;
+      }
+
+      const ogUrl = root.querySelector('meta[property="og:url"]');
+      if (ogUrl) {
+        metadata.og!.url = ogUrl.getAttribute("content") || undefined;
+      }
+
+      const ogSiteName = root.querySelector('meta[property="og:site_name"]');
+      if (ogSiteName) {
+        metadata.og!.site_name =
+          ogSiteName.getAttribute("content") || undefined;
+      }
+
+      const ogType = root.querySelector('meta[property="og:type"]');
+      if (ogType) {
+        metadata.og!.type = ogType.getAttribute("content") || undefined;
+      }
+
+      // Extract basic meta tags
+      const titleTag = root.querySelector("title");
+      if (titleTag) {
+        metadata.meta!.title = titleTag.innerHTML;
+      }
+
+      const descriptionTag = root.querySelector('meta[name="description"]');
+      if (descriptionTag) {
+        metadata.meta!.description =
+          descriptionTag.getAttribute("content") || undefined;
+      }
+
+      // Instagram-specific: Extract clean caption from og:title
+      if (metadata.og?.title) {
+        // Instagram format: "Username on Instagram: "actual caption content""
+        const instagramCaptionMatch = metadata.og.title.match(
+          /on Instagram: "(.+)"$/
+        );
+        if (instagramCaptionMatch) {
+          metadata.og.caption = instagramCaptionMatch[1];
+        }
+      }
+
+      console.log("✅ Successfully extracted web metadata with axios");
+      console.log("📋 Full extracted metadata:", {
+        ogTitle: metadata.og?.title,
+        ogDescription: metadata.og?.description,
+        ogImage: metadata.og?.image,
+        ogUrl: metadata.og?.url,
+        ogSiteName: metadata.og?.site_name,
+        ogType: metadata.og?.type,
+        caption: metadata.og?.caption,
+        metaTitle: metadata.meta?.title,
+        metaDescription: metadata.meta?.description,
+      });
+
+      return metadata;
+    } catch (error) {
+      console.error(`❌ Error on attempt ${attempt}:`, error);
+
+      if (attempt < maxRetries) {
+        console.log(`⏳ Retrying in a moment... (${attempt}/${maxRetries})`);
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue; // Retry
+      } else {
+        console.error("❌ All retry attempts failed due to errors");
+        if (axios.isAxiosError(error)) {
+          console.error("Status:", error.response?.status);
+          console.error("Headers:", error.response?.headers);
+        }
+        return null;
+      }
+    }
+  }
+
+  // This should never be reached, but just in case
+  return null;
+};
+
 const getFinalUrl = async (url: string) => {
   const res = await fetch(url, { redirect: "follow" }); // follows redirects automatically
   return res.url; // gives final resolved URL after following redirects
@@ -138,14 +346,59 @@ const getFinalUrl = async (url: string) => {
 
 const getMetadata = async (url: string) => {
   try {
-    const finalUrl = await getFinalUrl(url);
-    console.log("Resolved URL:", finalUrl);
+    console.log("🔍 Getting metadata for:", url);
 
-    const result = await parser(finalUrl);
+    // Use custom Instagram extraction for Instagram URLs
+    if (url.includes("instagram.com")) {
+      console.log(
+        "📸 Instagram URL detected, using custom extraction with CSRF token"
+      );
 
-    return result;
+      const metadata = await fetchWebMetadata(url);
+
+      if (!metadata) {
+        return null;
+      }
+
+      console.log(
+        "✅ Successfully extracted Instagram metadata with custom parser"
+      );
+
+      // Return in the format expected by the rest of the application
+      return {
+        og: {
+          title: metadata.og?.title,
+          description: metadata.og?.description,
+          image: metadata.og?.image,
+          url: metadata.og?.url || url,
+          site_name: metadata.og?.site_name,
+          type: metadata.og?.type,
+          caption: metadata.og?.caption, // Instagram-specific: clean caption
+        },
+        meta: {
+          title: metadata.meta?.title || metadata.og?.title,
+          description: metadata.meta?.description || metadata.og?.description,
+        },
+        images: metadata.og?.image ? [metadata.og.image] : [],
+      };
+    }
+
+    // For all other URLs, use html-metadata-parser
+    else {
+      console.log("🌐 Non-Instagram URL, using html-metadata-parser");
+
+      const finalUrl = await getFinalUrl(url);
+      console.log("Resolved URL:", finalUrl);
+
+      const result = await parser(finalUrl);
+      console.log(
+        "✅ Successfully extracted metadata with html-metadata-parser"
+      );
+
+      return result;
+    }
   } catch (err) {
-    console.error("Error parsing metadata:", err);
+    console.error("Error getting metadata:", err);
     return null;
   }
 };
@@ -196,6 +449,10 @@ const ContentSchema = z.object({
   content: z.string().optional(),
   trip_id: z.string(),
   user_notes: z.string().optional(),
+});
+
+const RefreshContentSchema = z.object({
+  content_id: z.string(),
 });
 
 const UserTripSchema = z.object({
@@ -640,6 +897,300 @@ const processContentAnalysisAsync = async (
   }
 };
 
+// New function to process content updates (similar to processContentAnalysisAsync but for updates)
+const processContentUpdateAsync = async (
+  contentId: string,
+  description: string,
+  req: Request,
+  url: string,
+  userId: string,
+  tripId: string
+): Promise<void> => {
+  try {
+    console.log(`Starting async update processing for content ${contentId}`);
+
+    // Get existing content to preserve trip context
+    const existingContent = await prisma.content.findUnique({
+      where: { id: contentId },
+      select: {
+        id: true,
+        tripId: true,
+        userId: true,
+        url: true,
+      },
+    });
+
+    if (!existingContent) {
+      throw new Error(`Content ${contentId} not found`);
+    }
+
+    // Extract structured data using AI (same as extract-lat-long)
+    const analysis = await extractLocationAndClassify(description, req);
+
+    // Get title from the first analysis object, if present
+    const title =
+      analysis && analysis.length > 0 && analysis[0].title
+        ? analysis[0].title
+        : "";
+
+    // Calculate pins count
+    const pinsCount = analysis.filter(
+      (a) => a.classification !== "Not Pinned"
+    ).length;
+
+    // Delete existing pins for this content before creating new ones
+    console.log(`Deleting existing pins for content ${contentId}`);
+    await prisma.pin.deleteMany({
+      where: { contentId: contentId },
+    });
+    console.log(`Existing pins deleted for content ${contentId}`);
+
+    // Fire external API calls without waiting for response if needed
+    if (
+      url.includes("instagram.com") ||
+      url.includes("youtube") ||
+      url.includes("youtu.be")
+    ) {
+      console.log("Instagram/YouTube URL detected, calling analysis API");
+      fetch("https://kadshnkjadnk.pinspire.co.in/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentId: contentId, url: url }),
+      }).catch((error) => {
+        console.error(
+          `Failed to call Instagram/YouTube analysis API for content ${contentId}:`,
+          error
+        );
+      });
+    } else if (url.includes("tiktok.com")) {
+      console.log("TikTok URL detected, calling analysis API");
+      fetch("https://kadshnkjadnk.pinspire.co.in/api/tiktok-analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentId: contentId, url: url }),
+      }).catch((error) => {
+        console.error(
+          `Failed to call TikTok analysis API for content ${contentId}:`,
+          error
+        );
+      });
+    }
+
+    // Update the Content entry with new structured data, title, and pins count
+    await updateContent(contentId, analysis, title, pinsCount);
+
+    req.logger?.debug(
+      `Updated content entry with new structured data ${contentId}`
+    );
+
+    let pinsCreated = 0;
+
+    // Process each analysis object for pin creation (same logic as extract-lat-long)
+    await Promise.all(
+      analysis.map(async (analysis) => {
+        try {
+          if (analysis.classification === "Not Pinned") {
+            return;
+          }
+
+          const full_loc =
+            (analysis.name ?? "") + " " + (analysis.location ?? "");
+
+          console.log(
+            `Processing pin for: ${full_loc} (${analysis.classification})`
+          );
+
+          // Step 1: Get Place ID
+          const placeId = await getPlaceId(full_loc, req);
+          let coordinates;
+          let placeCacheId;
+
+          // Step 2: Check if the place exists in the cache
+          let placeCache = await getPlaceCacheById(placeId);
+
+          if (!placeCache) {
+            req.logger?.debug(
+              "Could not find place in place Cache.. getting full place details"
+            );
+
+            // Step 3: If not in cache, fetch full place details (includes coordinates)
+            const placeDetails = await getFullPlaceDetails(full_loc, req);
+
+            req.logger?.debug(
+              `Place details for placeID - ${placeId} is - ${placeDetails}`
+            );
+
+            // Use coordinates from place details instead of separate API call
+            coordinates = placeDetails.location
+              ? {
+                  lat: placeDetails.location.latitude,
+                  lng: placeDetails.location.longitude,
+                }
+              : null;
+
+            if (!coordinates) {
+              req.logger?.error(`No coordinates found for place: ${full_loc}`);
+              throw new Error(
+                `Could not get coordinates for place: ${full_loc}`
+              );
+            }
+
+            req.logger?.debug(
+              `Coordinates for placeID - ${placeId} is - ${coordinates}`
+            );
+
+            // Step 4: Store in cache
+            placeCache = await createPlaceCache({
+              placeId: placeDetails.id,
+              name: placeDetails.name,
+              rating: placeDetails.rating ?? null,
+              userRatingCount: placeDetails.userRatingCount ?? null,
+              websiteUri: placeDetails.websiteUri ?? null,
+              googleMapsLink: placeDetails.googleMapsUri ?? null,
+              currentOpeningHours: placeDetails.currentOpeningHours,
+              regularOpeningHours: placeDetails.regularOpeningHours,
+              lat: coordinates.lat,
+              lng: coordinates.lng,
+              images: placeDetails.images ?? [],
+              utcOffsetMinutes: placeDetails.utcOffsetMinutes ?? null,
+            });
+
+            req.logger?.debug(
+              `Created new entry in place cache ${placeCache.id} for placeID ${placeId}`
+            );
+          } else {
+            req.logger?.debug(`Found place id - ${placeId} in place cache`);
+            coordinates = { lat: placeCache.lat, lng: placeCache.lng };
+          }
+
+          placeCacheId = placeCache.id;
+
+          // Step 5: Create Pin linked to PlaceCache
+          const pin = await createPin({
+            name: analysis.name ?? "",
+            category: analysis.classification ?? "",
+            contentId: contentId,
+            placeCacheId: placeCacheId,
+            coordinates: coordinates,
+            description: analysis.additional_info ?? "",
+          });
+
+          if (pin) {
+            pinsCreated++;
+          }
+
+          req.logger?.info(
+            `Created Pin - ${pin.id} with content_id - ${contentId} and place_id - ${placeCacheId}`
+          );
+        } catch (error) {
+          console.error(
+            `Error creating pin for ${analysis.name || "unknown place"}:`,
+            error
+          );
+          req.logger?.error(
+            `Failed to create pin for ${analysis.name}:`,
+            error
+          );
+          // Continue processing other pins even if one fails
+        }
+      })
+    );
+
+    // Determine if external API calls are needed
+    const needsExternalAPI =
+      url.includes("instagram.com") ||
+      url.includes("tiktok.com") ||
+      url.includes("youtube") ||
+      url.includes("youtu.be");
+
+    // If no external API calls are needed, set status to COMPLETED and send notifications
+    if (!needsExternalAPI) {
+      await updateContentStatus(contentId, "COMPLETED");
+
+      // Get content details for notification
+      const contentWithDetails = await prisma.content.findUnique({
+        where: { id: contentId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          trip: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      // Send notifications to trip members about pins updated (if any pins were added)
+      if (pinsCount > 0 && contentWithDetails) {
+        try {
+          await sendPinAddedNotifications(
+            contentWithDetails.trip.id,
+            contentWithDetails.user.id,
+            pinsCount,
+            contentWithDetails.trip.name,
+            contentWithDetails.user.name,
+            title || contentWithDetails.title || undefined,
+            contentWithDetails.id
+          );
+        } catch (notificationError) {
+          console.error(
+            "Error sending pin updated notifications:",
+            notificationError
+          );
+          // Don't fail the request if notifications fail
+        }
+      }
+
+      // Emit completion status via WebSocket
+      emitContentProcessingStatus(tripId, contentId, "completed", {
+        pinsCount: pinsCount,
+        title: title,
+      });
+    }
+
+    // Generate embeddings for updated content
+    try {
+      console.log(
+        `🔄 Starting embedding generation for updated content ${contentId}...`
+      );
+      generateContentEmbeddings(contentId)
+        .then(() => {
+          console.log(
+            ` Embeddings generated successfully for content ${contentId}`
+          );
+        })
+        .catch((embeddingError) => {
+          console.error(
+            `❌ Failed to generate embeddings for content ${contentId}:`,
+            embeddingError
+          );
+        });
+    } catch (embeddingError) {
+      console.error(
+        `❌ Error starting embedding generation for content ${contentId}:`,
+        embeddingError
+      );
+    }
+
+    console.log(` Async update processing completed for content ${contentId}`);
+  } catch (error) {
+    console.error(
+      `❌ Error in async update processing for content ${contentId}:`,
+      error
+    );
+    req.logger?.error(
+      `Async update processing failed for content ${contentId}:`,
+      error
+    );
+  }
+};
+
 app.post(
   "/api/extract-lat-long",
   authenticate,
@@ -847,6 +1398,228 @@ app.post(
           .json({ error: "Invalid input data", details: error.errors });
       } else {
         console.error(`Error processing request:`, error);
+        res.status(500).json({ error: "Internal server error." });
+      }
+    }
+  }
+);
+
+// New endpoint to refresh existing content (similar to extract-lat-long but refreshes/updates existing content instead of creating)
+app.post(
+  "/api/refresh-content",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const validatedData = RefreshContentSchema.parse(req.body);
+
+      console.log(req.body);
+      const { content_id } = validatedData;
+
+      console.log(
+        `Received request to refresh content: content_id=${content_id}`
+      );
+      req.logger?.info(
+        `Request received to refresh content: content_id=${content_id}`
+      );
+
+      // Get the existing content entry
+      const existingContent = await prisma.content.findUnique({
+        where: { id: content_id },
+        include: {
+          trip: true,
+        },
+      });
+
+      if (!existingContent) {
+        res.status(404).json({ error: "Content not found" });
+        return;
+      }
+
+      const trip_id = existingContent.tripId;
+      const user_id = existingContent.userId; // Use existing content's userId
+      const contentUrl = existingContent.url; // Always use existing URL
+
+      let description = "";
+      let contentThumbnail = existingContent.thumbnail;
+
+      // Always fetch content from the URL
+      req.logger?.debug(`Fetching content from URL: ${contentUrl}`);
+
+      // For Instagram, Facebook, or TikTok - use metadata extraction
+      if (
+        contentUrl.includes("instagram.com") ||
+        contentUrl.includes("facebook.com") ||
+        contentUrl.includes("tiktok.com") ||
+        contentUrl.includes("youtube.com") ||
+        contentUrl.includes("youtu.be")
+      ) {
+        req.logger?.debug(
+          `Social media URL detected, using metadata extraction`
+        );
+
+        const metadata = await getMetadata(contentUrl);
+
+        if (contentUrl.includes("facebook.com")) {
+          req.logger?.debug(
+            `Facebook URL detected, using custom metadata extraction`
+          );
+          description = metadata?.og.title ?? "";
+        } else if (
+          contentUrl.includes("youtube.com") ||
+          contentUrl.includes("youtu.be")
+        ) {
+          const videoId = getYouTubeVideoId(contentUrl);
+          req.logger?.debug(
+            `YouTube URL detected, analyzing content for ${videoId}`
+          );
+
+          const { title, description: desc } = videoId
+            ? await getYoutubeMetadata(videoId)
+            : { title: null, description: "" };
+
+          if (title || desc) {
+            const isTravelContent = await analyzeYouTubeContent(
+              title,
+              desc,
+              req
+            );
+            if (!isTravelContent) {
+              req.logger?.info(
+                `YouTube content is not travel-related. Skipping processing for URL: ${contentUrl}`
+              );
+              // Immediately return a response indicating that the content is not relevant
+              res.status(200).json({
+                success: false,
+                message:
+                  "YouTube content is not travel-related and will not be processed.",
+              });
+              return;
+            }
+            req.logger?.info(
+              "YouTube content is travel-related. Proceeding with processing."
+            );
+            description = [title, desc].filter(Boolean).join(" ");
+          } else {
+            req.logger?.warn(
+              `Missing title or description for YouTube URL: ${contentUrl}. Skipping analysis.`
+            );
+
+            res.status(200).json({
+              success: false,
+              message: `Missing title or description for YouTube URL: ${contentUrl}`,
+            });
+            return;
+          }
+        } else {
+          description = [metadata?.meta.title, metadata?.meta.description]
+            .filter(Boolean)
+            .join(" ");
+        }
+        contentThumbnail = metadata?.og.image ?? contentThumbnail;
+      }
+      // For all other URLs - use Jina API directly
+      else {
+        try {
+          req.logger?.debug(
+            `Non-social media URL detected, fetching full webpage content via Jina API: ${contentUrl}`
+          );
+
+          const jinaResponse = await fetch(`https://r.jina.ai/${contentUrl}`, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${process.env.JINA_API_TOKEN}`,
+            },
+          });
+
+          if (jinaResponse.ok) {
+            const webpageContent = await jinaResponse.text();
+            if (webpageContent && webpageContent.trim().length > 0) {
+              // Use the full webpage content
+              description = webpageContent;
+              req.logger?.debug(
+                `Successfully extracted webpage content (${webpageContent.length} characters)`
+              );
+            } else {
+              req.logger?.warn(`Jina API returned empty content`);
+              description = "No content available from URL";
+            }
+          } else {
+            req.logger?.warn(
+              `Jina API request failed with status: ${jinaResponse.status}`
+            );
+            description = "Failed to fetch content from URL";
+          }
+        } catch (jinaError) {
+          req.logger?.warn(
+            `Failed to fetch webpage content via Jina API:`,
+            jinaError
+          );
+          description = "Error fetching content from URL";
+        }
+      }
+
+      console.log("Description is ", description);
+
+      if (!description) {
+        req.logger?.error(`Failed to fetch metadata for URL - ${contentUrl}`);
+      }
+
+      // Update the content's rawData (URL and user_notes remain unchanged)
+      await prisma.content.update({
+        where: { id: content_id },
+        data: {
+          rawData: description,
+          ...(contentThumbnail && { thumbnail: contentThumbnail }),
+          status: "PROCESSING",
+        },
+      });
+
+      console.log(
+        `Content updated with ID: ${content_id}. Starting async processing...`
+      );
+      req.logger?.info(
+        `Content updated: ${content_id}. Processing will continue asynchronously.`
+      );
+
+      // Emit processing status via WebSocket
+      emitContentProcessingStatus(trip_id, content_id, "processing");
+
+      // Start async processing in the background (don't await)
+      processContentUpdateAsync(
+        content_id,
+        description,
+        req,
+        contentUrl,
+        user_id,
+        trip_id
+      );
+
+      // Return immediate response with content info
+      res.status(202).json({
+        success: true,
+        message: "Content is being refreshed and processed",
+        content: {
+          id: content_id,
+          url: contentUrl,
+          rawData: description,
+          userId: user_id,
+          tripId: trip_id,
+          thumbnail: contentThumbnail,
+          updatedAt: new Date(),
+        },
+        processing: {
+          status: "in_progress",
+          message:
+            "AI analysis and pin updates are being processed in the background",
+        },
+      });
+    } catch (error) {
+      console.log("Look at exact error", error);
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json({ error: "Invalid input data", details: error.errors });
+      } else {
+        console.error(`Error processing refresh request:`, error);
         res.status(500).json({ error: "Internal server error." });
       }
     }
@@ -3405,14 +4178,14 @@ app.delete(
 // Send notification to specific users
 app.post(
   "/api/notifications/send",
-  authenticate,
+  // authenticate,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const currentUser = req.currentUser;
-      if (currentUser == null) {
-        res.status(401).json({ error: "User not authenticated" });
-        return;
-      }
+      // const currentUser = req.currentUser;
+      // if (currentUser == null) {
+      //   res.status(401).json({ error: "User not authenticated" });
+      //   return;
+      // }
 
       const { userIds, title, body, data, imageUrl } =
         SendNotificationSchema.parse(req.body);
@@ -3424,9 +4197,9 @@ app.post(
         imageUrl,
       });
 
-      req.logger?.info(
-        `Notification sent by user ${currentUser.id} to ${userIds.length} users - Success: ${result.successCount}, Failed: ${result.failureCount}`
-      );
+      // req.logger?.info(
+      //   `Notification sent by user ${currentUser.id} to ${userIds.length} users - Success: ${result.successCount}, Failed: ${result.failureCount}`
+      // );
 
       res.status(200).json({
         success: true,
@@ -4086,18 +4859,44 @@ app.post(
         update: {
           countryId: countryInfo.code,
           url: content.url,
-          demoData,
-          lat: 0, // Default coordinates - can be updated later
-          lng: 0,
+          demoData: {
+            ...demoData,
+            countryInfo: {
+              name: countryInfo.name,
+              code: countryInfo.code,
+              capital: countryInfo.capital,
+              language: countryInfo.language,
+              hello: countryInfo.hello,
+              flag: countryInfo.flag,
+              continent: countryInfo.continent,
+              lat: countryInfo.lat || 0,
+              lng: countryInfo.lng || 0,
+            },
+          },
+          lat: countryInfo.lat || 0,
+          lng: countryInfo.lng || 0,
           flag: countryInfo.flag,
         },
         create: {
           countryName: country,
           countryId: countryInfo.code,
           url: content.url,
-          demoData,
-          lat: 0, // Default coordinates - can be updated later
-          lng: 0,
+          demoData: {
+            ...demoData,
+            countryInfo: {
+              name: countryInfo.name,
+              code: countryInfo.code,
+              capital: countryInfo.capital,
+              language: countryInfo.language,
+              hello: countryInfo.hello,
+              flag: countryInfo.flag,
+              continent: countryInfo.continent,
+              lat: countryInfo.lat || 0,
+              lng: countryInfo.lng || 0,
+            },
+          },
+          lat: countryInfo.lat || 0,
+          lng: countryInfo.lng || 0,
           flag: countryInfo.flag,
         },
       });
@@ -4148,17 +4947,27 @@ app.get(
       });
 
       // Format for country selection page
-      const formattedCountries = countries.map((country: any) => ({
-        name: country.countryName,
-        id: country.id, // Use the UUID as id
-        countryId: country.countryId, // Also include countryId separately
-        url: country.url,
-        hasDemo: true,
-        demoData: country.demoData,
-        lat: country.lat,
-        lng: country.lng,
-        flag: country.flag,
-      }));
+      const formattedCountries = countries.map((country: any) => {
+        // Extract countryInfo from demoData if available
+        const countryInfo = country.demoData?.countryInfo || {};
+
+        return {
+          name: country.countryName,
+          id: country.id, // Use the UUID as id
+          countryId: country.countryId, // Also include countryId separately
+          url: country.url,
+          hasDemo: true,
+          demoData: country.demoData,
+          lat: country.lat,
+          lng: country.lng,
+          flag: country.flag,
+          // Add greeting/hello from countryInfo
+          greeting: countryInfo.hello || "Hello",
+          language: countryInfo.language || "English",
+          capital: countryInfo.capital || "",
+          continent: countryInfo.continent || "",
+        };
+      });
 
       res.status(200).json({
         success: true,
@@ -4290,28 +5099,18 @@ app.post(
   "/api/backfill-google-maps-links",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      console.log(
-        "🔗 Starting Google Maps links backfill for latest 1000 places..."
-      );
-
-      // Get latest 1000 places that don't have Google Maps links
-      const placesToUpdate = await prisma.placeCache.findMany({
+      // First, get the total count of places without Google Maps links
+      const totalPlacesToUpdate = await prisma.placeCache.count({
         where: {
-          googleMapsLink: null, // Only get places without Google Maps links
-        },
-        orderBy: {
-          createdAt: "desc", // Latest first
-        },
-        take: 10,
-        select: {
-          id: true,
-          placeId: true,
-          name: true,
-          createdAt: true,
+          googleMapsLink: null,
         },
       });
 
-      if (placesToUpdate.length === 0) {
+      console.log(
+        `🔗 Starting Google Maps links backfill for ALL ${totalPlacesToUpdate} places without links...`
+      );
+
+      if (totalPlacesToUpdate === 0) {
         res.status(200).json({
           success: true,
           message: "No places found that need Google Maps links",
@@ -4321,107 +5120,173 @@ app.post(
         return;
       }
 
-      console.log(`📊 Found ${placesToUpdate.length} places to update`);
+      // Process in chunks to avoid memory issues with large datasets
+      const chunkSize = 100; // Get 100 places at a time from DB
+      const batchSize = 50; // Process 50 places in parallel (optimized for 500 req/min)
+      const delay = 6000; // 6 seconds delay between batches (500 req/min = 50 req per 6 seconds)
 
-      let successCount = 0;
-      let errorCount = 0;
-      const errors: string[] = [];
+      let totalSuccessCount = 0;
+      let totalErrorCount = 0;
+      const allErrors: string[] = [];
 
-      // Process places in batches to avoid rate limiting
-      const batchSize = 10;
-      const delay = 10000; // 2000ms (2 seconds) delay between batches
+      // Process all places in chunks
+      for (let offset = 0; offset < totalPlacesToUpdate; offset += chunkSize) {
+        console.log(
+          `📊 Fetching chunk ${Math.floor(offset / chunkSize) + 1}/${Math.ceil(
+            totalPlacesToUpdate / chunkSize
+          )} (${Math.min(chunkSize, totalPlacesToUpdate - offset)} places)`
+        );
 
-      for (let i = 0; i < placesToUpdate.length; i += batchSize) {
-        const batch = placesToUpdate.slice(i, i + batchSize);
+        // Get current chunk of places that don't have Google Maps links
+        const placesToUpdate = await prisma.placeCache.findMany({
+          where: {
+            googleMapsLink: null, // Only get places without Google Maps links
+          },
+          orderBy: {
+            createdAt: "desc", // Latest first
+          },
+          take: chunkSize,
+          skip: offset,
+          select: {
+            id: true,
+            placeId: true,
+            name: true,
+            createdAt: true,
+          },
+        });
+
+        if (placesToUpdate.length === 0) {
+          console.log(`📊 No more places to process in this chunk.`);
+          break; // No more places to process
+        }
 
         console.log(
-          `🔄 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
-            placesToUpdate.length / batchSize
-          )} (${batch.length} places)`
+          `📊 Processing ${placesToUpdate.length} places from chunk ${
+            Math.floor(offset / chunkSize) + 1
+          }`
         );
 
-        // Process batch in parallel
-        await Promise.allSettled(
-          batch.map(async (place) => {
-            try {
-              // Get only Google Maps URI to minimize API costs
-              const googleMapsUri = await getGoogleMapsUriOnly(
-                place.placeId,
-                req
-              );
+        let chunkSuccessCount = 0;
+        let chunkErrorCount = 0;
+        const chunkErrors: string[] = [];
 
-              if (googleMapsUri) {
-                // Fetch Google Maps image from the URI
-                console.log(`🖼️ Fetching Google Maps image for ${place.name}`);
-                const googleMapsImage = await fetchGoogleMapsImage(
-                  googleMapsUri
+        // Process places in batches to avoid rate limiting
+        for (let i = 0; i < placesToUpdate.length; i += batchSize) {
+          const batch = placesToUpdate.slice(i, i + batchSize);
+
+          console.log(
+            `🔄 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
+              placesToUpdate.length / batchSize
+            )} from chunk ${Math.floor(offset / chunkSize) + 1} (${
+              batch.length
+            } places)`
+          );
+
+          // Process batch in parallel
+          await Promise.allSettled(
+            batch.map(async (place) => {
+              try {
+                // Get only Google Maps URI to minimize API costs
+                const googleMapsUri = await getGoogleMapsUriOnly(
+                  place.placeId,
+                  req
                 );
 
-                // Prepare update data
-                const updateData: any = {
-                  googleMapsLink: googleMapsUri,
-                  lastCached: new Date(), // Update the cache timestamp
-                };
-
-                // Always update images array - either with Google Maps image or empty (no backup mode)
-                if (googleMapsImage) {
+                if (googleMapsUri) {
+                  // Fetch Google Maps image from the URI
                   console.log(
-                    ` Found Google Maps image for ${place.name}: ${googleMapsImage}`
+                    `🖼️ Fetching Google Maps image for ${place.name}`
                   );
-                  updateData.images = [googleMapsImage]; // Replace existing images with the Google Maps image
+                  const googleMapsImage = await fetchGoogleMapsImage(
+                    googleMapsUri
+                  );
+
+                  // Prepare update data
+                  const updateData: any = {
+                    googleMapsLink: googleMapsUri,
+                    lastCached: new Date(), // Update the cache timestamp
+                  };
+
+                  // Always update images array - either with Google Maps image or empty (no backup mode)
+                  if (googleMapsImage) {
+                    console.log(
+                      ` Found Google Maps image for ${place.name}: ${googleMapsImage}`
+                    );
+                    updateData.images = [googleMapsImage]; // Replace existing images with the Google Maps image
+                  } else {
+                    console.log(
+                      `⚠️ No image found for ${place.name} Google Maps link - clearing images array`
+                    );
+                    updateData.images = []; // Clear existing images since we only want Google Maps metadata images
+                  }
+
+                  // Update the place cache with the Google Maps link and image
+                  await prisma.placeCache.update({
+                    where: { id: place.id },
+                    data: updateData,
+                  });
+
+                  console.log(
+                    ` Updated ${place.name}: ${googleMapsUri}${
+                      googleMapsImage ? " with image" : ""
+                    }`
+                  );
+                  chunkSuccessCount++;
                 } else {
-                  console.log(
-                    `⚠️ No image found for ${place.name} Google Maps link - clearing images array`
+                  console.log(`⚠️ No Google Maps URI found for ${place.name}`);
+                  chunkErrorCount++;
+                  chunkErrors.push(
+                    `No Google Maps URI found for ${place.name} (ID: ${place.id})`
                   );
-                  updateData.images = []; // Clear existing images since we only want Google Maps metadata images
                 }
-
-                // Update the place cache with the Google Maps link and image
-                await prisma.placeCache.update({
-                  where: { id: place.id },
-                  data: updateData,
-                });
-
-                console.log(
-                  ` Updated ${place.name}: ${googleMapsUri}${
-                    googleMapsImage ? " with image" : ""
-                  }`
-                );
-                successCount++;
-              } else {
-                console.log(`⚠️ No Google Maps URI found for ${place.name}`);
-                errorCount++;
-                errors.push(
-                  `No Google Maps URI found for ${place.name} (ID: ${place.id})`
+              } catch (error) {
+                console.error(`❌ Failed to update ${place.name}:`, error);
+                chunkErrorCount++;
+                const errorMessage =
+                  error instanceof Error ? error.message : String(error);
+                chunkErrors.push(
+                  `Failed to update ${place.name}: ${errorMessage}`
                 );
               }
-            } catch (error) {
-              console.error(`❌ Failed to update ${place.name}:`, error);
-              errorCount++;
-              const errorMessage =
-                error instanceof Error ? error.message : String(error);
-              errors.push(`Failed to update ${place.name}: ${errorMessage}`);
-            }
-          })
+            })
+          );
+
+          // Add delay between batches to respect rate limits
+          if (i + batchSize < placesToUpdate.length) {
+            console.log(`⏱️ Waiting ${delay}ms before next batch...`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          }
+        }
+
+        // Update totals for this chunk
+        totalSuccessCount += chunkSuccessCount;
+        totalErrorCount += chunkErrorCount;
+        allErrors.push(...chunkErrors);
+
+        console.log(
+          `📊 Chunk ${
+            Math.floor(offset / chunkSize) + 1
+          } completed: ${chunkSuccessCount} successful, ${chunkErrorCount} errors. Total so far: ${totalSuccessCount}/${totalPlacesToUpdate}`
         );
 
-        // Add delay between batches to respect rate limits
-        if (i + batchSize < placesToUpdate.length) {
+        // Add delay between chunks to be extra safe with rate limits
+        if (offset + chunkSize < totalPlacesToUpdate) {
+          console.log(`⏱️ Waiting ${delay}ms before next chunk...`);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
 
       console.log(
-        `🎉 Backfill completed: ${successCount} successful, ${errorCount} errors`
+        `🎉 Full backfill completed: ${totalSuccessCount} successful, ${totalErrorCount} errors out of ${totalPlacesToUpdate} total places`
       );
 
       res.status(200).json({
         success: true,
-        message: "Google Maps links backfill completed",
-        total: placesToUpdate.length,
-        updated: successCount,
-        errors: errorCount,
-        errorDetails: errors.slice(0, 10), // Return first 10 errors for debugging
+        message: "Google Maps links backfill completed for all places",
+        total: totalPlacesToUpdate,
+        updated: totalSuccessCount,
+        errors: totalErrorCount,
+        errorDetails: allErrors.slice(0, 20), // Return first 20 errors for debugging
       });
     } catch (error) {
       console.error("Error during Google Maps links backfill:", error);

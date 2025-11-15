@@ -208,6 +208,7 @@ export const getTripsByUserId = async (userId: string) => {
     const tripUsers = await prisma.tripUser.findMany({
       where: { userId: userId }, // Filter by userId
       select: {
+        createdAt: true, // When user joined the trip
         trip: {
           select: {
             id: true,
@@ -221,10 +222,52 @@ export const getTripsByUserId = async (userId: string) => {
       },
     });
 
-    // Extract the trip details from the tripUser relation
-    const trips = tripUsers.map((tripUser) => tripUser.trip);
+    // For each trip, find the most recent content shared by this user
+    const tripsWithActivity = await Promise.all(
+      tripUsers.map(async (tripUser) => {
+        const mostRecentContent = await prisma.content.findFirst({
+          where: {
+            userId: userId,
+            tripId: tripUser.trip.id,
+          },
+          orderBy: {
+            createdAt: 'desc'
+          },
+          select: {
+            createdAt: true,
+          },
+        });
 
-    return trips;
+        return {
+          ...tripUser.trip,
+          joinedAt: tripUser.createdAt,
+          lastContentSharedAt: mostRecentContent?.createdAt || null,
+        };
+      })
+    );
+
+    // Sort trips according to the ordering logic:
+    // 1. Trips where user hasn't shared anything yet (ordered by join date desc - most recently joined first)
+    // 2. Then trips where user has shared content (ordered by most recent activity desc)
+    const sortedTrips = tripsWithActivity.sort((a, b) => {
+      const aHasUserContent = a.lastContentSharedAt !== null;
+      const bHasUserContent = b.lastContentSharedAt !== null;
+
+      // If both have no user content, sort by join date (most recent first)
+      if (!aHasUserContent && !bHasUserContent) {
+        return new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime();
+      }
+
+      // If only one has user content, prioritize the one without user content (user hasn't shared yet)
+      if (!aHasUserContent && bHasUserContent) return -1;
+      if (aHasUserContent && !bHasUserContent) return 1;
+
+      // If both have user content, sort by most recent user activity
+      return new Date(b.lastContentSharedAt!).getTime() - new Date(a.lastContentSharedAt!).getTime();
+    });
+
+    // Return trips without the activity metadata to match existing API structure
+    return sortedTrips.map(({ joinedAt, lastContentSharedAt, ...trip }) => trip);
   } catch (error) {
     console.error(`Error fetching trips for user ${userId}:`, error);
     throw new Error("Error fetching trips");
