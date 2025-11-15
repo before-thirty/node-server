@@ -97,7 +97,7 @@ export async function extractLocationAndClassify(
 ): Promise<CaptionAnalysisResponse[]> {
   try {
     const response = await openaiClient.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5-mini",
       messages: [
         {
           role: "system",

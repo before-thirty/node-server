@@ -5059,7 +5059,7 @@ app.post(
                 });
                 
                 console.log(` Updated ${place.name}: ${googleMapsUri}${googleMapsImage ? ' with image' : ''}`);
-                successCount++;
+                chunkSuccessCount++;
               } else {
                 console.log(`⚠️ No Google Maps URI found for ${place.name}`);
                 chunkErrorCount++;
