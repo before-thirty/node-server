@@ -1,12 +1,28 @@
 import axios from "axios";
 import dotenv from "dotenv";
 import express, { Request, Response } from "express";
-import { parse } from 'node-html-parser';
+import { parse } from "node-html-parser";
+import * as Sentry from "@sentry/node";
 
 dotenv.config();
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 const GOOGLE_MAPS_IMAGE_API = "https://places.googleapis.com/v1";
+
+// Helper function to log Google Places API exceptions to Sentry
+const logGooglePlacesException = (
+  error: any,
+  functionName: string,
+  extra: Record<string, any>
+): void => {
+  Sentry.captureException(error, {
+    tags: {
+      function: functionName,
+      api: "google-places",
+    },
+    extra: extra,
+  });
+};
 
 // Updated PlaceDetails interface
 interface PlaceDetails {
@@ -46,33 +62,33 @@ function createAlwaysOpenHours(): any {
     periods: [
       {
         open: { day: 0, hour: 0, minute: 0 },
-        close: { day: 0, hour: 23, minute: 59 }
+        close: { day: 0, hour: 23, minute: 59 },
       },
       {
         open: { day: 1, hour: 0, minute: 0 },
-        close: { day: 1, hour: 23, minute: 59 }
+        close: { day: 1, hour: 23, minute: 59 },
       },
       {
         open: { day: 2, hour: 0, minute: 0 },
-        close: { day: 2, hour: 23, minute: 59 }
+        close: { day: 2, hour: 23, minute: 59 },
       },
       {
         open: { day: 3, hour: 0, minute: 0 },
-        close: { day: 3, hour: 23, minute: 59 }
+        close: { day: 3, hour: 23, minute: 59 },
       },
       {
         open: { day: 4, hour: 0, minute: 0 },
-        close: { day: 4, hour: 23, minute: 59 }
+        close: { day: 4, hour: 23, minute: 59 },
       },
       {
         open: { day: 5, hour: 0, minute: 0 },
-        close: { day: 5, hour: 23, minute: 59 }
+        close: { day: 5, hour: 23, minute: 59 },
       },
       {
         open: { day: 6, hour: 0, minute: 0 },
-        close: { day: 6, hour: 23, minute: 59 }
-      }
-    ]
+        close: { day: 6, hour: 23, minute: 59 },
+      },
+    ],
   };
 }
 
@@ -200,6 +216,9 @@ export async function getPlaceId(query: string, req: Request): Promise<string> {
     return places[0].id;
   } catch (error) {
     req.logger?.error("Error calling Places API:", error);
+    logGooglePlacesException(error, "getPlaceId", {
+      query: query.substring(0, 200), // Truncate to avoid huge payloads
+    });
     throw new Error("Failed to get place ID from query.");
   }
 }
@@ -229,23 +248,23 @@ export async function getFullPlaceDetails(
       );
     }
     const place = places[0];
-    
+
     // Log Google Maps URI and Links
     console.log("Google Maps URI:", place.googleMapsUri);
     console.log("Google Maps Links:", place.googleMapsLinks);
-    
+
     // Get both image and rating from Google Maps URI in a single request
     let extractedRating: number | null = null;
     let photoUrls: string[] = [];
-    
+
     if (place.googleMapsUri) {
       const metadata = await fetchGoogleMapsMetadata(place.googleMapsUri);
       extractedRating = metadata.rating;
-      
+
       if (metadata.imageUrl) {
         photoUrls.push(metadata.imageUrl);
       } else {
-        console.log('🔄 No image from metadata, falling back to photos API');
+        console.log("🔄 No image from metadata, falling back to photos API");
         // Fallback to Google Maps Image API
         const photos = place.photos || [];
         for (const photo of photos) {
@@ -256,14 +275,14 @@ export async function getFullPlaceDetails(
               photoUrls.push(response.data.photoUri);
               if (response.status === 200) break;
             } catch (error) {
-              console.error('Failed to get photo from Images API:', error);
+              console.error("Failed to get photo from Images API:", error);
             }
           }
         }
       }
     } else {
       // No Google Maps URI, use photos API directly
-      console.log('🔄 No Google Maps URI, using photos API directly');
+      console.log("🔄 No Google Maps URI, using photos API directly");
       const photos = place.photos || [];
       for (const photo of photos) {
         if (photo.name) {
@@ -273,7 +292,7 @@ export async function getFullPlaceDetails(
             photoUrls.push(response.data.photoUri);
             if (response.status === 200) break;
           } catch (error) {
-            console.error('Failed to get photo from Images API:', error);
+            console.error("Failed to get photo from Images API:", error);
           }
         }
       }
@@ -293,7 +312,7 @@ export async function getFullPlaceDetails(
       formattedAddress: place.formattedAddress,
       editorialSummary: {
         text: "N/A",
-        languageCode: "en"
+        languageCode: "en",
       },
       businessStatus: place.businessStatus,
       priceLevel: place.priceLevel,
@@ -307,6 +326,9 @@ export async function getFullPlaceDetails(
     };
   } catch (error) {
     req.logger?.error("Error calling Places API:", error);
+    logGooglePlacesException(error, "getFullPlaceDetails", {
+      query: query.substring(0, 200), // Truncate to avoid huge payloads
+    });
     throw new Error("Failed to get place details from query.");
   }
 }
@@ -362,15 +384,15 @@ export async function getPlaceDetailsFromId(
     // Get both image and rating from Google Maps URI in a single request
     let extractedRating: number | null = null;
     let photoUrls: string[] = [];
-    
+
     if (place.googleMapsUri) {
       const metadata = await fetchGoogleMapsMetadata(place.googleMapsUri);
       extractedRating = metadata.rating;
-      
+
       if (metadata.imageUrl) {
         photoUrls.push(metadata.imageUrl);
       } else {
-        console.log('🔄 No image from metadata, falling back to photos API');
+        console.log("🔄 No image from metadata, falling back to photos API");
         // Fallback to Google Maps Image API
         const photos = place.photos || [];
         for (const photo of photos) {
@@ -381,14 +403,14 @@ export async function getPlaceDetailsFromId(
               photoUrls.push(response.data.photoUri);
               if (response.status === 200) break;
             } catch (error) {
-              console.error('Failed to get photo from Images API:', error);
+              console.error("Failed to get photo from Images API:", error);
             }
           }
         }
       }
     } else {
       // No Google Maps URI, use photos API directly
-      console.log('🔄 No Google Maps URI, using photos API directly');
+      console.log("🔄 No Google Maps URI, using photos API directly");
       const photos = place.photos || [];
       for (const photo of photos) {
         if (photo.name) {
@@ -398,7 +420,7 @@ export async function getPlaceDetailsFromId(
             photoUrls.push(response.data.photoUri);
             if (response.status === 200) break;
           } catch (error) {
-            console.error('Failed to get photo from Images API:', error);
+            console.error("Failed to get photo from Images API:", error);
           }
         }
       }
@@ -419,7 +441,7 @@ export async function getPlaceDetailsFromId(
       formattedAddress: place.formattedAddress,
       editorialSummary: {
         text: "N/A",
-        languageCode: "en"
+        languageCode: "en",
       },
       businessStatus: place.businessStatus,
       priceLevel: place.priceLevel,
@@ -433,6 +455,10 @@ export async function getPlaceDetailsFromId(
     };
   } catch (error) {
     req.logger?.error("Error calling Places API for place details:", error);
+    logGooglePlacesException(error, "getPlaceDetailsFromId", {
+      placeId: placeId,
+      userId: userId || "none",
+    });
     throw new Error("Failed to get place details from placeId.");
   }
 }
@@ -468,6 +494,9 @@ export async function getGoogleMapsUriOnly(
   } catch (error) {
     req.logger?.error("Error calling Places API for Google Maps URI:", error);
     console.error(`Failed to get Google Maps URI for place ${placeId}:`, error);
+    logGooglePlacesException(error, "getGoogleMapsUriOnly", {
+      placeId: placeId,
+    });
     return null;
   }
 }
@@ -504,6 +533,9 @@ export async function getCoordinatesFromPlaceId(
     };
   } catch (error) {
     req.logger?.error("Error calling Geocoding API:", error);
+    logGooglePlacesException(error, "getCoordinatesFromPlaceId", {
+      placeId: placeId,
+    });
     throw new Error("Failed to get coordinates from placeId.");
   }
 }
@@ -637,6 +669,20 @@ export async function searchPlaces(
       }
     }
     req?.logger?.error("Error calling Places API v1:", error);
+    logGooglePlacesException(error, "searchPlaces", {
+      query: query.substring(0, 200), // Truncate to avoid huge payloads
+      location: location ? `${location.lat},${location.lng}` : "none",
+      radius: radius,
+      type: type || "none",
+      userId: userId || "none",
+      axiosErrorDetails: axios.isAxiosError(error)
+        ? {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            url: error.config?.url,
+          }
+        : undefined,
+    });
     throw new Error(
       `Failed to get place suggestions: ${error.message || "Unknown error"}`
     );
@@ -653,91 +699,113 @@ interface GoogleMapsMetadata {
  * @param googleMapsLink - The Google Maps link (e.g., https://maps.google.com/?cid=12345&g_mp=...)
  * @returns Promise<GoogleMapsMetadata> - The extracted image URL and rating
  */
-export const fetchGoogleMapsMetadata = async (googleMapsLink: string): Promise<GoogleMapsMetadata> => {
+export const fetchGoogleMapsMetadata = async (
+  googleMapsLink: string
+): Promise<GoogleMapsMetadata> => {
   try {
-    console.log('🔍 Fetching Google Maps metadata (image + rating) from:', googleMapsLink);
-    
+    console.log(
+      "🔍 Fetching Google Maps metadata (image + rating) from:",
+      googleMapsLink
+    );
+
     const response = await fetch(googleMapsLink, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+      },
     });
 
     if (!response.ok) {
-      console.warn('Failed to fetch Google Maps page:', response.status);
+      console.warn("Failed to fetch Google Maps page:", response.status);
       return { imageUrl: null, rating: null };
     }
 
     const html = await response.text();
-    
+
     // Parse HTML and extract both image and rating from meta tags
     const root = parse(html);
-    
+
     let imageUrl: string | null = null;
     let rating: number | null = null;
-    
+
     // Extract image URL
     // Look for og:image meta tag first
     const ogImageMeta = root.querySelector('meta[property="og:image"]');
     if (ogImageMeta) {
-      imageUrl = ogImageMeta.getAttribute('content') || null;
+      imageUrl = ogImageMeta.getAttribute("content") || null;
       if (imageUrl) {
-        console.log('✅ Successfully extracted image URL from og:image:', imageUrl);
+        console.log(
+          "✅ Successfully extracted image URL from og:image:",
+          imageUrl
+        );
       }
     }
-    
+
     // Fallback to itemprop="image" meta tag
     if (!imageUrl) {
       const itempropImageMeta = root.querySelector('meta[itemprop="image"]');
       if (itempropImageMeta) {
-        imageUrl = itempropImageMeta.getAttribute('content') || null;
+        imageUrl = itempropImageMeta.getAttribute("content") || null;
         if (imageUrl) {
-          console.log('✅ Successfully extracted image URL from itemprop="image":', imageUrl);
+          console.log(
+            '✅ Successfully extracted image URL from itemprop="image":',
+            imageUrl
+          );
         }
       }
     }
-    
+
     // Extract rating
     // Look for og:description which contains "★★★★★ · Pub"
     const ogDescription = root.querySelector('meta[property="og:description"]');
     if (ogDescription) {
-      const description = ogDescription.getAttribute('content');
+      const description = ogDescription.getAttribute("content");
       if (description) {
         const starMatches = description.match(/★+/g);
         if (starMatches && starMatches[0]) {
           rating = starMatches[0].length;
-          console.log('✅ Successfully extracted rating from og:description:', rating);
+          console.log(
+            "✅ Successfully extracted rating from og:description:",
+            rating
+          );
         }
       }
     }
-    
+
     // Fallback to itemprop="description" meta tag for rating
     if (!rating) {
-      const itempropDescription = root.querySelector('meta[itemprop="description"]');
+      const itempropDescription = root.querySelector(
+        'meta[itemprop="description"]'
+      );
       if (itempropDescription) {
-        const description = itempropDescription.getAttribute('content');
+        const description = itempropDescription.getAttribute("content");
         if (description) {
           const starMatches = description.match(/★+/g);
           if (starMatches && starMatches[0]) {
             rating = starMatches[0].length;
-            console.log('✅ Successfully extracted rating from itemprop="description":', rating);
+            console.log(
+              '✅ Successfully extracted rating from itemprop="description":',
+              rating
+            );
           }
         }
       }
     }
-    
+
     if (!imageUrl) {
-      console.warn('❌ No image found in Google Maps meta tags');
+      console.warn("❌ No image found in Google Maps meta tags");
     }
     if (!rating) {
-      console.warn('❌ No rating found in Google Maps meta tags');
+      console.warn("❌ No rating found in Google Maps meta tags");
     }
-    
+
     return { imageUrl, rating };
-    
   } catch (error) {
-    console.error('Error fetching Google Maps metadata:', error);
+    console.error("Error fetching Google Maps metadata:", error);
+    logGooglePlacesException(error, "fetchGoogleMapsMetadata", {
+      googleMapsLink: googleMapsLink.substring(0, 200), // Truncate to avoid huge payloads
+    });
     return { imageUrl: null, rating: null };
   }
 };
@@ -747,7 +815,9 @@ export const fetchGoogleMapsMetadata = async (googleMapsLink: string): Promise<G
  * @param googleMapsLink - The Google Maps link
  * @returns Promise<string | null> - The extracted image URL or null if not found
  */
-export const fetchGoogleMapsImage = async (googleMapsLink: string): Promise<string | null> => {
+export const fetchGoogleMapsImage = async (
+  googleMapsLink: string
+): Promise<string | null> => {
   const metadata = await fetchGoogleMapsMetadata(googleMapsLink);
   return metadata.imageUrl;
 };

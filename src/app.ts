@@ -1,5 +1,8 @@
+import "./instrument";
+
 // Importing required modules
 import express, { Request, Response, NextFunction } from "express";
+import * as Sentry from "@sentry/node";
 import { createServer } from "http";
 import morgan from "morgan";
 import bodyParser from "body-parser";
@@ -227,6 +230,11 @@ const fetchWebMetadata = async (url: string): Promise<WebMetadata | null> => {
           console.error(
             "❌ All retry attempts failed - Instagram still returning login page"
           );
+          logMetadataIssue(
+            "All retry attempts to fetch instagram metadata failed - Instagram still returning login page",
+            url
+          );
+
           return null;
         }
       }
@@ -344,6 +352,25 @@ const getFinalUrl = async (url: string) => {
   return res.url; // gives final resolved URL after following redirects
 };
 
+// Helper function to check if metadata result is empty
+const isMetadataEmpty = (result: any): boolean => {
+  if (!result || result == null) {
+    return true;
+  }
+  // Check if result has meaningful data
+  const hasData =
+    result.og?.title ||
+    result.meta?.title ||
+    (result.images && result.images.length > 0) ||
+    result.og?.description;
+  return !hasData;
+};
+
+// Helper function to log metadata issues to Sentry
+const logMetadataIssue = (message: string, url: string): void => {
+  Sentry.captureMessage(`getMetadata: ${message} for URL: ${url}`, "warning");
+};
+
 const getMetadata = async (url: string) => {
   try {
     console.log("🔍 Getting metadata for:", url);
@@ -357,6 +384,7 @@ const getMetadata = async (url: string) => {
       const metadata = await fetchWebMetadata(url);
 
       if (!metadata) {
+        logMetadataIssue("Instagram extraction returned empty/null", url);
         return null;
       }
 
@@ -365,7 +393,7 @@ const getMetadata = async (url: string) => {
       );
 
       // Return in the format expected by the rest of the application
-      return {
+      const result = {
         og: {
           title: metadata.og?.title,
           description: metadata.og?.description,
@@ -381,6 +409,15 @@ const getMetadata = async (url: string) => {
         },
         images: metadata.og?.image ? [metadata.og.image] : [],
       };
+
+      if (isMetadataEmpty(result)) {
+        logMetadataIssue(
+          "Extracted Instagram metadata is empty (no title, description, or image)",
+          url
+        );
+      }
+
+      return result;
     }
 
     // For all other URLs, use html-metadata-parser
@@ -395,10 +432,27 @@ const getMetadata = async (url: string) => {
         "✅ Successfully extracted metadata with html-metadata-parser"
       );
 
+      if (isMetadataEmpty(result)) {
+        const issueMessage = !result
+          ? "Parser returned undefined/null"
+          : "Extracted metadata is empty (no title, description, or images)";
+        logMetadataIssue(issueMessage, url);
+        return null;
+      }
+
       return result;
     }
   } catch (err) {
     console.error("Error getting metadata:", err);
+    // Log error to Sentry with context
+    Sentry.captureException(err, {
+      tags: {
+        function: "getMetadata",
+      },
+      extra: {
+        url: url,
+      },
+    });
     return null;
   }
 };
@@ -5299,6 +5353,20 @@ app.post(
     }
   }
 );
+
+// Sentry error handler - must be after all routes but before other error handlers
+Sentry.setupExpressErrorHandler(app);
+
+// Custom error handler // I DONT THINK THIS IS WORKING BUT PRIOR TO THIS ALSO WE DID NOT HAVE
+// A GLOBAL ERROR HANDLER SO NOTHING WILL CHANGE
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  // If Sentry already handled the error, it will have set res.sentry
+  const statusCode = err.statusCode || err.status || 500;
+  res.status(statusCode).json({
+    error: "Internal server error",
+    ...(process.env.NODE_ENV === "development" && { details: err.message }),
+  });
+});
 
 // Start the server
 const httpServer = createServer(app);
