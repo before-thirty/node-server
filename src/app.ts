@@ -102,6 +102,7 @@ import pocRoutes from "./poc-routes";
 import { generateContentEmbeddings } from "./poc-embeddings";
 import cronRoutes from "./cronRoutes";
 import moderationRoutes from "./moderationRoutes";
+import analyticsRoutes from "./analyticsRoutes";
 import {
   registerFcmToken,
   unregisterFcmToken,
@@ -127,6 +128,7 @@ app.use(morgan("dev"));
 app.use("/api", pocRoutes); // POC semantic search routes
 app.use("/cron", cronRoutes);
 app.use("/api/moderation", moderationRoutes);
+app.use("/api/admin/analytics", analyticsRoutes);
 
 // app.use(
 //   "/.well-known",
