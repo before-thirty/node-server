@@ -148,7 +148,7 @@ export async function extractLocationAndClassify(
 ): Promise<CaptionAnalysisResponse[]> {
   try {
     const response = await openaiClient.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
@@ -186,7 +186,7 @@ export async function extractLocationAndClassify(
     req.logger?.error("Error calling OpenAI API:", error);
     logApiException(error, "extractLocationAndClassify", "openai", {
       caption: caption.substring(0, 200), // Truncate to avoid huge payloads
-      model: "gpt-5-mini",
+      model: "gpt-4o-mini",
     });
     throw new Error("Failed to analyze caption.");
   }
