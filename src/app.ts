@@ -103,6 +103,7 @@ import { generateContentEmbeddings } from "./poc-embeddings";
 import cronRoutes from "./cronRoutes";
 import moderationRoutes from "./moderationRoutes";
 import analyticsRoutes from "./analyticsRoutes";
+import publicRoutes from "./publicRoutes";
 import {
   registerFcmToken,
   unregisterFcmToken,
@@ -129,6 +130,7 @@ app.use("/api", pocRoutes); // POC semantic search routes
 app.use("/cron", cronRoutes);
 app.use("/api/moderation", moderationRoutes);
 app.use("/api/admin/analytics", analyticsRoutes);
+app.use("/", publicRoutes); // Public routes (no prefix needed as routes include full path)
 
 // app.use(
 //   "/.well-known",
