@@ -183,5 +183,64 @@ router.get(
   }
 );
 
-export default router;
+// Public endpoint to update content title (restricted to marketing trip IDs)
+router.put(
+  "/api/public/content/:contentId/title",
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { contentId } = req.params;
+      const { title } = req.body;
 
+      if (!title || typeof title !== "string" || title.trim().length === 0) {
+        res
+          .status(400)
+          .json({ error: "Title is required and must be a non-empty string" });
+        return;
+      }
+
+      // Fetch content to check if it belongs to a marketing trip
+      const content = await prisma.content.findUnique({
+        where: { id: contentId },
+        select: {
+          id: true,
+          tripId: true,
+        },
+      });
+
+      if (!content) {
+        res.status(404).json({ error: "Content not found" });
+        return;
+      }
+
+      // Check if the content belongs to a marketing trip
+      if (!MARKETING_TRIP_IDS.includes(content.tripId)) {
+        res
+          .status(403)
+          .json({ error: "This content is not publicly available" });
+        return;
+      }
+
+      // Update the title
+      const updatedContent = await prisma.content.update({
+        where: { id: contentId },
+        data: {
+          title: title.trim(),
+        },
+        select: {
+          id: true,
+          title: true,
+        },
+      });
+
+      res.status(200).json({
+        success: true,
+        content: updatedContent,
+      });
+    } catch (error) {
+      console.error(`Error updating content title:`, error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+);
+
+export default router;
