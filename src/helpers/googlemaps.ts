@@ -237,7 +237,7 @@ export async function getFullPlaceDetails(
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask":
-          "places.addressComponents,places.formattedAddress,places.id,places.displayName,places.photos,places.utcOffsetMinutes,places.location,places.businessStatus,places.priceLevel,places.types,places.googleMapsUri,places.googleMapsLinks",
+          "places.addressComponents,places.formattedAddress,places.id,places.displayName,places.photos,places.utcOffsetMinutes,places.location,places.businessStatus,places.types,places.googleMapsUri,places.googleMapsLinks",
       },
     };
     const response = await axios.post(url, data, config);
@@ -315,7 +315,7 @@ export async function getFullPlaceDetails(
         languageCode: "en",
       },
       businessStatus: place.businessStatus,
-      priceLevel: place.priceLevel,
+      priceLevel: "PRICE_LEVEL_UNSPECIFIED",
       types: place.types,
       location: place.location
         ? {
@@ -352,7 +352,7 @@ export async function getPlaceDetailsFromId(
         "Content-Type": "application/json",
         "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
         "X-Goog-FieldMask":
-          "addressComponents,formattedAddress,id,displayName,photos,utcOffsetMinutes,location,businessStatus,priceLevel,types,googleMapsUri,googleMapsLinks",
+          "addressComponents,formattedAddress,id,displayName,photos,utcOffsetMinutes,location,businessStatus,types,googleMapsUri,googleMapsLinks"
       },
     };
 
@@ -444,7 +444,7 @@ export async function getPlaceDetailsFromId(
         languageCode: "en",
       },
       businessStatus: place.businessStatus,
-      priceLevel: place.priceLevel,
+      priceLevel: "PRICE_LEVEL_UNSPECIFIED",
       types: place.types,
       location: place.location
         ? {
