@@ -34,6 +34,7 @@ model User {
   userPlaceMustDos    UserPlaceMustDo[]
   reportedUsers       UserReport[]      @relation("UserReporter")
   userReports         UserReport[]      @relation("ReportedUser")
+  userActivities      UserActivity[]
 
   @@schema("app_data")
 }
@@ -233,6 +234,19 @@ model UserBlock {
   blockingUser   User     @relation("BlockingUser", fields: [blockingUserId], references: [id], onDelete: Cascade)
 
   @@unique([blockingUserId, blockedUserId])
+  @@schema("app_data")
+}
+
+model UserActivity {
+  id           String   @id @default(uuid())
+  userId       String
+  activityType String
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([activityType, createdAt])
   @@schema("app_data")
 }
 

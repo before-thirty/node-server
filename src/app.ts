@@ -89,10 +89,9 @@ import {
   verifyPinAccess,
   getPublicTrips,
   getUserRoleInTrip,
-  getUsersWithContentInTrip,
   getAllTripUsers,
-  appendPinCount,
   getContentSummarySinceLastLogin,
+  logUserActivity,
 } from "./helpers/dbHelpers"; // Import helper functions
 import { PrismaClient } from "@prisma/client";
 import { authenticate } from "./middleware/currentUser";
@@ -114,6 +113,7 @@ import {
 } from "./services/notificationService";
 import { emitContentProcessingStatus } from "./services/websocketService";
 import { getYoutubeMetadata, getYouTubeVideoId } from "./helpers/googleApis";
+import { USER_ACTIVITY_TYPES } from "./constants/userActivity";
 
 const prisma = new PrismaClient();
 
@@ -2299,6 +2299,60 @@ app.put(
       res.status(200).json(updatedUser);
     } catch (error) {
       console.error(`Error updating user tutorial status:`, error);
+      res.status(500).json({ error: "Internal server error." });
+    }
+  }
+);
+
+// Update user survey completion status
+app.put(
+  "/api/update-user-survey-status",
+  authenticate,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { survey1Completed } = req.body;
+      const user = req.currentUser;
+
+      if (user == null) {
+        throw new Error("User not authenticated");
+      }
+
+      if (
+        survey1Completed !== undefined &&
+        typeof survey1Completed !== "boolean"
+      ) {
+        res
+          .status(400)
+          .json({ error: "survey1Completed must be a boolean" });
+        return;
+      }
+
+      // First, fetch the complete user data to get existing metadata
+      const currentUserData = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { metadata: true },
+      });
+
+      const updateData: any = {};
+      if (survey1Completed !== undefined) {
+        updateData.complete_survey_1 = survey1Completed;
+      }
+
+      // Preserve existing metadata and merge with new data
+      const updatedMetadata = mergeMetadata(
+        currentUserData?.metadata,
+        updateData
+      );
+
+      const updatedUser = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          metadata: updatedMetadata,
+        } as any,
+      });
+      res.status(200).json(updatedUser);
+    } catch (error) {
+      console.error(`Error updating user survey status:`, error);
       res.status(500).json({ error: "Internal server error." });
     }
   }
@@ -4643,10 +4697,12 @@ app.post(
         return;
       }
 
+      const nowDate = new Date();
+
       // Update the user's last opened time
       const updatedUser = await prisma.user.update({
         where: { id: currentUser.id },
-        data: { lastOpened: new Date() },
+        data: { lastOpened: nowDate },
         select: {
           id: true,
           name: true,
@@ -4656,6 +4712,9 @@ app.post(
         },
       });
 
+      await logUserActivity(currentUser.id, USER_ACTIVITY_TYPES.OPEN_APP, {
+        loggedFrom: "api/update-last-opened",
+      });
       req.logger?.info(`Last opened time updated for user ${currentUser.id}`);
 
       res.status(200).json({

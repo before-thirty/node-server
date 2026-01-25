@@ -4,6 +4,7 @@
 
 import express, { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
+import { USER_ACTIVITY_TYPES } from "./constants/userActivity";
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -376,6 +377,74 @@ router.get(
       });
     } catch (error) {
       console.error("Error fetching new contents by unique users:", error);
+      res.status(500).json({
+        success: false,
+        error: "Internal server error",
+      });
+    }
+  }
+);
+
+// Get app opens by unique users by time period
+router.get(
+  "/app-opens",
+  requireAdminSecret,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const periodParam = (req.query.period as string) || "day"; // day, week, month
+      const period = periodParam as Period;
+      const limit = parseInt((req.query.limit as string) || "30"); // number of periods to return
+
+      const nowIST = getISTDate();
+      const nowUTC = new Date();
+
+      const buckets = buildISTBuckets(period, limit, nowIST, nowUTC);
+      if (buckets.length === 0) {
+        res.status(200).json({ success: true, period, data: [] });
+        return;
+      }
+
+      const globalStartUTC = buckets[0].startUTC;
+      const globalEndUTC = buckets[buckets.length - 1].endUTC;
+
+      const activities = await prisma.userActivity.findMany({
+        where: {
+          activityType: USER_ACTIVITY_TYPES.OPEN_APP,
+          createdAt: {
+            gte: globalStartUTC,
+            lte: globalEndUTC,
+          },
+        },
+        select: {
+          createdAt: true,
+          userId: true,
+        },
+      });
+
+      const bucketUsers = buckets.map(() => new Set<string>());
+
+      for (const activity of activities) {
+        const createdIST = getISTDate(activity.createdAt);
+        const idx = buckets.findIndex(
+          (b) => createdIST >= b.startIST && createdIST <= b.endIST
+        );
+        if (idx !== -1) {
+          bucketUsers[idx].add(activity.userId);
+        }
+      }
+
+      const data = buckets.map((b, idx) => ({
+        period: b.label,
+        count: bucketUsers[idx].size,
+      }));
+
+      res.status(200).json({
+        success: true,
+        period,
+        data,
+      });
+    } catch (error) {
+      console.error("Error fetching app opens:", error);
       res.status(500).json({
         success: false,
         error: "Internal server error",

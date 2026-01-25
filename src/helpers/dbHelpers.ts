@@ -1,8 +1,22 @@
 import { PrismaClient } from "@prisma/client";
-
+import type { Prisma } from "@prisma/client";
 import { v4 as uuidv4 } from "uuid";
 
 const prisma = new PrismaClient();
+
+export const logUserActivity = async (
+  userId: string,
+  activityType: string,
+  metadata?: Prisma.InputJsonValue | null
+) => {
+  return prisma.userActivity.create({
+    data: {
+      userId,
+      activityType,
+      metadata: metadata ?? undefined,
+    },
+  });
+};
 
 // Create a new Content entry
 export const createContent = async (
