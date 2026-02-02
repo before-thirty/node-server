@@ -29,12 +29,12 @@ model User {
   fcmTokens           FcmToken[]
   ShareToken          ShareToken[]
   tripUsers           TripUser[]
+  userActivities      UserActivity[]
   blockedByUsers      UserBlock[]       @relation("BlockedUser")
   blockingUsers       UserBlock[]       @relation("BlockingUser")
   userPlaceMustDos    UserPlaceMustDo[]
   reportedUsers       UserReport[]      @relation("UserReporter")
   userReports         UserReport[]      @relation("ReportedUser")
-  userActivities      UserActivity[]
 
   @@schema("app_data")
 }
@@ -135,9 +135,9 @@ model PlaceCache {
   regularOpeningHours Json?
   userRatingCount     Int?
   websiteUri          String?
-  googleMapsLink      String?
   images              String[]
   utcOffsetMinutes    Int?
+  googleMapsLink      String?
   pins                Pin[]
   userPlaceMustDos    UserPlaceMustDo[]
 
